@@ -31,8 +31,7 @@ El sistema busca ayudar a estudiantes, docentes y desarrolladores a comprender d
 
 - Frontend: React 19 con TypeScript.
 - Build tool: Vite 7.
-- Router: TanStack Router.
-- UI: Tailwind CSS, Radix UI y lucide-react.
+- UI: Tailwind CSS.
 - Base de datos: MySQL 8.
 - Gestor de paquetes: npm.
 
