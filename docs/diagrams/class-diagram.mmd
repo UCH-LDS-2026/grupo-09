@@ -1,0 +1,153 @@
+classDiagram
+    direction LR
+
+    class User {
+        +bigint id
+        +string name
+        +string email
+        +string passwordHash
+        +enum role
+        +datetime createdAt
+        +datetime updatedAt
+    }
+
+    class Project {
+        +bigint id
+        +bigint userId
+        +string name
+        +string slug
+        +string description
+        +int incomingTrafficRps
+        +boolean isRunning
+        +datetime createdAt
+        +datetime updatedAt
+    }
+
+    class ComponentCategory {
+        +bigint id
+        +string name
+        +int displayOrder
+        +datetime createdAt
+    }
+
+    class ComponentType {
+        +bigint id
+        +bigint categoryId
+        +string code
+        +string label
+        +string icon
+        +string colorToken
+        +int defaultInstances
+        +int defaultCapacityRps
+        +int defaultBaseLatencyMs
+        +int defaultQueueSize
+        +int defaultTimeoutMs
+        +decimal defaultCostPerInstance
+        +boolean isActive
+        +datetime createdAt
+        +datetime updatedAt
+    }
+
+    class ProjectNode {
+        +bigint id
+        +bigint projectId
+        +bigint componentTypeId
+        +string clientNodeId
+        +string name
+        +decimal positionX
+        +decimal positionY
+        +int instances
+        +int capacityRps
+        +int baseLatencyMs
+        +int queueSize
+        +int timeoutMs
+        +decimal costPerInstance
+        +datetime createdAt
+        +datetime updatedAt
+    }
+
+    class ProjectEdge {
+        +bigint id
+        +bigint projectId
+        +string clientEdgeId
+        +bigint fromNodeId
+        +bigint toNodeId
+        +boolean isAsync
+        +datetime createdAt
+    }
+
+    class ObjectiveType {
+        +bigint id
+        +string code
+        +string label
+        +string unit
+        +enum comparison
+        +datetime createdAt
+    }
+
+    class ProjectObjective {
+        +bigint id
+        +bigint projectId
+        +bigint objectiveTypeId
+        +decimal targetValue
+        +datetime createdAt
+        +datetime updatedAt
+    }
+
+    class SimulationRun {
+        +bigint id
+        +bigint projectId
+        +int incomingTrafficRps
+        +decimal avgLatencyMs
+        +decimal errorRate
+        +decimal throughputRps
+        +decimal monthlyCost
+        +bigint bottleneckNodeId
+        +datetime createdAt
+    }
+
+    class SimulationNodeMetric {
+        +bigint id
+        +bigint simulationRunId
+        +bigint projectNodeId
+        +decimal loadRatio
+        +decimal throughputRps
+        +decimal latencyMs
+        +decimal errorRate
+        +enum status
+        +decimal monthlyCost
+        +datetime createdAt
+    }
+
+    class ScalingRecommendation {
+        +bigint id
+        +bigint simulationRunId
+        +bigint projectNodeId
+        +int currentInstances
+        +int recommendedInstances
+        +decimal extraMonthlyCost
+        +string reason
+        +datetime appliedAt
+        +datetime createdAt
+    }
+
+    User "1" --> "0..*" Project : owns
+    Project "1" --> "0..*" ProjectNode : contains
+    Project "1" --> "0..*" ProjectEdge : connects
+    Project "1" --> "0..*" ProjectObjective : defines
+    Project "1" --> "0..*" SimulationRun : executes
+
+    ComponentCategory "1" --> "1..*" ComponentType : groups
+    ComponentType "1" --> "0..*" ProjectNode : instantiates
+
+    ProjectNode "1" --> "0..*" ProjectEdge : source
+    ProjectNode "1" --> "0..*" ProjectEdge : target
+
+    ObjectiveType "1" --> "0..*" ProjectObjective : configures
+
+    SimulationRun "1" --> "0..*" SimulationNodeMetric : records
+    ProjectNode "1" --> "0..*" SimulationNodeMetric : measuredBy
+
+    SimulationRun "1" --> "0..*" ScalingRecommendation : generates
+    ProjectNode "1" --> "0..*" ScalingRecommendation : appliesTo
+    ProjectNode "0..1" --> "0..*" SimulationRun : bottleneck

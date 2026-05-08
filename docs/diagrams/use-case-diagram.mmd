@@ -1,0 +1,47 @@
+flowchart LR
+    user([Usuario])
+    admin([Administrador])
+    system([Sistema de simulacion])
+
+    subgraph app[Software Estres]
+        UC1((Registrarse / iniciar sesion))
+        UC2((Crear proyecto))
+        UC3((Editar diagrama de arquitectura))
+        UC4((Agregar componente al diagrama))
+        UC5((Conectar componentes))
+        UC6((Configurar componente))
+        UC7((Definir objetivos de prueba))
+        UC8((Ejecutar prueba de estres))
+        UC9((Visualizar metricas))
+        UC10((Detectar cuello de botella))
+        UC11((Generar recomendacion de escalado))
+        UC12((Guardar proyecto))
+        UC13((Consultar historial de simulaciones))
+        UC14((Administrar catalogo de componentes))
+    end
+
+    user --> UC1
+    user --> UC2
+    user --> UC3
+    user --> UC7
+    user --> UC8
+    user --> UC9
+    user --> UC12
+    user --> UC13
+
+    admin --> UC14
+    admin --> UC1
+
+    system --> UC10
+    system --> UC11
+
+    UC3 -. "<<include>>" .-> UC4
+    UC3 -. "<<include>>" .-> UC5
+    UC3 -. "<<include>>" .-> UC6
+
+    UC8 -. "<<include>>" .-> UC9
+    UC8 -. "<<include>>" .-> UC10
+
+    UC10 -. "<<extend>>" .-> UC11
+    UC7 -. "<<extend>>" .-> UC8
+    UC13 -. "<<include>>" .-> UC9
