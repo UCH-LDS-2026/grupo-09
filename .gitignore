@@ -1,7 +1,20 @@
-node_modules
+# Dependencias
+node_modules/
+
+# Variables de entorno
 .env
-__pycache__
+
+# Archivos de Python
+__pycache__/
+*.pyc
+
+# Logs
 *.log
-dist
-build
+
+# Archivos generados
+dist/
+build/
+
+# Sistema operativo
 .DS_Store
+Thumbs.db
