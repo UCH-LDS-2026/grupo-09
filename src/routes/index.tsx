@@ -1,14 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
-import SimulatorDashboard from "@/components/SimulatorDashboard";
+import { AppController } from "@/controllers/AppController";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Distributed Architecture Simulator" },
+      { title: "Simulador de arquitectura distribuida" },
       {
         name: "description",
         content:
-          "Build, simulate, and stress-test distributed system architectures in real time. Visualize bottlenecks, latency, and cost.",
+          "Construí, simulá y probá arquitecturas distribuidas en tiempo real. Visualizá cuellos de botella, latencia y costo.",
       },
     ],
   }),
@@ -16,5 +16,5 @@ export const Route = createFileRoute("/")({
 });
 
 function Index() {
-  return <SimulatorDashboard />;
+  return <AppController />;
 }

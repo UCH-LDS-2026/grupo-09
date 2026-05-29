@@ -15,10 +15,10 @@ export interface SimNode {
   x: number;
   y: number;
   instances: number;
-  capacity: number;     // req/s per instance
-  baseLatency: number;  // ms
+  capacity: number; // req/s per instance
+  baseLatency: number; // ms
   queueSize: number;
-  timeout: number;      // ms
+  timeout: number; // ms
   costPerInstance: number; // $ / month
 }
 
@@ -30,12 +30,12 @@ export interface SimEdge {
 }
 
 export interface NodeMetrics {
-  load: number;        // 0..>1 (utilization)
-  throughput: number;  // req/s actually served
-  latency: number;     // ms effective
-  errorRate: number;   // 0..1
+  load: number; // 0..>1 (utilization)
+  throughput: number; // req/s actually served
+  latency: number; // ms effective
+  errorRate: number; // 0..1
   status: NodeStatus;
-  cost: number;        // monthly $
+  cost: number; // monthly $
 }
 
 export interface SimResult {
@@ -51,43 +51,90 @@ export interface SimResult {
 
 export const KIND_META: Record<
   NodeKind,
-  { label: string; category: string; color: string; defaults: Omit<SimNode, "id" | "x" | "y" | "name" | "kind"> }
+  {
+    label: string;
+    category: string;
+    color: string;
+    defaults: Omit<SimNode, "id" | "x" | "y" | "name" | "kind">;
+  }
 > = {
   api_gateway: {
-    label: "API Gateway",
-    category: "Traffic & Edge",
+    label: "Puerta de enlace API",
+    category: "Tráfico y entrada",
     color: "var(--neon-violet)",
-    defaults: { instances: 2, capacity: 800, baseLatency: 8, queueSize: 100, timeout: 2000, costPerInstance: 25 },
+    defaults: {
+      instances: 2,
+      capacity: 800,
+      baseLatency: 8,
+      queueSize: 100,
+      timeout: 2000,
+      costPerInstance: 25,
+    },
   },
   load_balancer: {
-    label: "Load Balancer",
-    category: "Traffic & Edge",
+    label: "Balanceador de carga",
+    category: "Tráfico y entrada",
     color: "var(--neon-cyan)",
-    defaults: { instances: 2, capacity: 5000, baseLatency: 2, queueSize: 200, timeout: 1000, costPerInstance: 18 },
+    defaults: {
+      instances: 2,
+      capacity: 5000,
+      baseLatency: 2,
+      queueSize: 200,
+      timeout: 1000,
+      costPerInstance: 18,
+    },
   },
   app_service: {
-    label: "App Service",
-    category: "Compute",
+    label: "Servicio de aplicación",
+    category: "Cómputo",
     color: "var(--neon-cyan)",
-    defaults: { instances: 2, capacity: 400, baseLatency: 35, queueSize: 100, timeout: 3000, costPerInstance: 40 },
+    defaults: {
+      instances: 2,
+      capacity: 400,
+      baseLatency: 35,
+      queueSize: 100,
+      timeout: 3000,
+      costPerInstance: 40,
+    },
   },
   cache: {
-    label: "Cache",
-    category: "Storage",
+    label: "Caché",
+    category: "Almacenamiento",
     color: "var(--neon-pink)",
-    defaults: { instances: 1, capacity: 8000, baseLatency: 1, queueSize: 500, timeout: 500, costPerInstance: 30 },
+    defaults: {
+      instances: 1,
+      capacity: 8000,
+      baseLatency: 1,
+      queueSize: 500,
+      timeout: 500,
+      costPerInstance: 30,
+    },
   },
   database: {
-    label: "Database",
-    category: "Storage",
+    label: "Base de datos",
+    category: "Almacenamiento",
     color: "var(--neon-amber)",
-    defaults: { instances: 1, capacity: 600, baseLatency: 18, queueSize: 200, timeout: 5000, costPerInstance: 80 },
+    defaults: {
+      instances: 1,
+      capacity: 600,
+      baseLatency: 18,
+      queueSize: 200,
+      timeout: 5000,
+      costPerInstance: 80,
+    },
   },
   queue: {
-    label: "Queue",
-    category: "Messaging",
+    label: "Cola",
+    category: "Mensajería",
     color: "var(--neon-violet)",
-    defaults: { instances: 1, capacity: 3000, baseLatency: 5, queueSize: 1000, timeout: 10000, costPerInstance: 20 },
+    defaults: {
+      instances: 1,
+      capacity: 3000,
+      baseLatency: 5,
+      queueSize: 1000,
+      timeout: 10000,
+      costPerInstance: 20,
+    },
   },
 };
 
@@ -116,11 +163,7 @@ export function statusFor(load: number): NodeStatus {
  * outgoing non-async edges. Async edges (queue) drain offered load instead of
  * propagating it downstream synchronously.
  */
-export function simulate(
-  nodes: SimNode[],
-  edges: SimEdge[],
-  trafficRps: number,
-): SimResult {
+export function simulate(nodes: SimNode[], edges: SimEdge[], trafficRps: number): SimResult {
   const incoming: Record<string, string[]> = {};
   const outgoing: Record<string, SimEdge[]> = {};
   nodes.forEach((n) => {

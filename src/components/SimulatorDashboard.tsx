@@ -26,17 +26,20 @@ import {
   Plus,
   ChevronLeft,
   ChevronRight,
+  LogOut,
+  Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { AuthUser } from "@/models/auth";
 
-// ---------- Initial example architecture ----------
+// ---------- Arquitectura inicial de ejemplo ----------
 const initialNodes: SimNode[] = [
-  { ...makeNode("api_gateway", 80, 220), id: "n_gw", name: "API Gateway" },
-  { ...makeNode("load_balancer", 320, 220), id: "n_lb", name: "Load Balancer" },
-  { ...makeNode("app_service", 580, 220), id: "n_app", name: "App Service" },
-  { ...makeNode("cache", 860, 110), id: "n_cache", name: "Cache" },
-  { ...makeNode("database", 860, 330), id: "n_db", name: "Database" },
-  { ...makeNode("queue", 580, 420), id: "n_queue", name: "Queue" },
+  { ...makeNode("api_gateway", 80, 220), id: "n_gw", name: "Puerta de enlace API" },
+  { ...makeNode("load_balancer", 320, 220), id: "n_lb", name: "Balanceador de carga" },
+  { ...makeNode("app_service", 580, 220), id: "n_app", name: "Servicio de aplicación" },
+  { ...makeNode("cache", 860, 110), id: "n_cache", name: "Caché" },
+  { ...makeNode("database", 860, 330), id: "n_db", name: "Base de datos" },
+  { ...makeNode("queue", 580, 420), id: "n_queue", name: "Cola" },
 ];
 const initialEdges: SimEdge[] = [
   { id: "e1", from: "n_gw", to: "n_lb" },
@@ -53,22 +56,47 @@ const STATUS_STYLES: Record<
   "healthy" | "warning" | "saturated" | "failed",
   { ring: string; glow: string; dot: string; label: string }
 > = {
-  healthy:   { ring: "ring-[color:var(--neon-cyan)]/40",   glow: "shadow-[var(--shadow-glow-cyan)]",      dot: "bg-[color:var(--status-healthy)]",   label: "Healthy" },
-  warning:   { ring: "ring-[color:var(--status-warning)]/60", glow: "shadow-[var(--shadow-glow-warning)]", dot: "bg-[color:var(--status-warning)]",   label: "Warning" },
-  saturated: { ring: "ring-[color:var(--status-saturated)]/70", glow: "shadow-[var(--shadow-glow-saturated)]", dot: "bg-[color:var(--status-saturated)]", label: "Saturated" },
-  failed:    { ring: "ring-[color:var(--status-failed)]/80", glow: "shadow-[var(--shadow-glow-saturated)]", dot: "bg-[color:var(--status-failed)]",    label: "Failed" },
+  healthy: {
+    ring: "ring-[color:var(--neon-cyan)]/40",
+    glow: "shadow-[var(--shadow-glow-cyan)]",
+    dot: "bg-[color:var(--status-healthy)]",
+    label: "Estable",
+  },
+  warning: {
+    ring: "ring-[color:var(--status-warning)]/60",
+    glow: "shadow-[var(--shadow-glow-warning)]",
+    dot: "bg-[color:var(--status-warning)]",
+    label: "Alerta",
+  },
+  saturated: {
+    ring: "ring-[color:var(--status-saturated)]/70",
+    glow: "shadow-[var(--shadow-glow-saturated)]",
+    dot: "bg-[color:var(--status-saturated)]",
+    label: "Saturado",
+  },
+  failed: {
+    ring: "ring-[color:var(--status-failed)]/80",
+    glow: "shadow-[var(--shadow-glow-saturated)]",
+    dot: "bg-[color:var(--status-failed)]",
+    label: "Falló",
+  },
 };
 
 const CATEGORIES: { name: string; kinds: NodeKind[] }[] = [
-  { name: "Traffic & Edge", kinds: ["api_gateway", "load_balancer"] },
-  { name: "Compute",        kinds: ["app_service"] },
-  { name: "Messaging",      kinds: ["queue"] },
-  { name: "Storage",        kinds: ["cache", "database"] },
+  { name: "Tráfico y entrada", kinds: ["api_gateway", "load_balancer"] },
+  { name: "Cómputo", kinds: ["app_service"] },
+  { name: "Mensajería", kinds: ["queue"] },
+  { name: "Almacenamiento", kinds: ["cache", "database"] },
 ];
 
-export default function SimulatorDashboard() {
+interface SimulatorDashboardProps {
+  user?: AuthUser;
+  onLogout?: () => void;
+}
+
+export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboardProps) {
   const [nodes, setNodes] = useState<SimNode[]>(initialNodes);
-  const [edges] = useState<SimEdge[]>(initialEdges);
+  const [edges, setEdges] = useState<SimEdge[]>(initialEdges);
   const [selectedId, setSelectedId] = useState<string | null>("n_app");
   const [traffic, setTraffic] = useState(600);
   const [running, setRunning] = useState(true);
@@ -163,8 +191,19 @@ export default function SimulatorDashboard() {
     setNodes((prev) => prev.map((n) => (n.id === selected.id ? { ...n, ...patch } : n)));
   };
 
+  const deleteSelected = () => {
+    if (!selected) return;
+    const selectedNodeId = selected.id;
+
+    setNodes((prev) => prev.filter((n) => n.id !== selectedNodeId));
+    setEdges((prev) => prev.filter((e) => e.from !== selectedNodeId && e.to !== selectedNodeId));
+    setSelectedId(null);
+    draggingRef.current = null;
+  };
+
   const reset = () => {
     setNodes(initialNodes);
+    setEdges(initialEdges);
     setTraffic(600);
     setRunning(true);
     setSelectedId("n_app");
@@ -175,7 +214,10 @@ export default function SimulatorDashboard() {
   const bottleneckNode = bottleneck ? nodes.find((n) => n.id === bottleneck.id) : undefined;
   const recommendedInstances =
     bottleneckNode && bottleneckMetrics
-      ? Math.max(bottleneckNode.instances + 1, Math.ceil(bottleneckNode.instances * Math.max(bottleneckMetrics.load, 1)))
+      ? Math.max(
+          bottleneckNode.instances + 1,
+          Math.ceil(bottleneckNode.instances * Math.max(bottleneckMetrics.load, 1)),
+        )
       : 0;
   const extraCost = bottleneckNode
     ? (recommendedInstances - bottleneckNode.instances) * bottleneckNode.costPerInstance
@@ -183,101 +225,133 @@ export default function SimulatorDashboard() {
 
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
-      {/* ---------- Top bar ---------- */}
+      {/* ---------- Barra superior ---------- */}
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-border/60 bg-panel/60 px-4 backdrop-blur">
         <div className="flex items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[color:var(--neon-cyan)]/15 ring-1 ring-[color:var(--neon-cyan)]/40">
             <Activity className="h-4 w-4 text-[color:var(--neon-cyan)]" />
           </div>
           <div>
-            <div className="text-sm font-semibold tracking-tight">Distributed Architecture Simulator</div>
-            <div className="font-mono text-[11px] text-muted-foreground">project / checkout-platform.v1</div>
+            <div className="text-sm font-semibold tracking-tight">
+              Simulador de arquitectura distribuida
+            </div>
+            <div className="font-mono text-[11px] text-muted-foreground">
+              proyecto / plataforma-checkout.v1
+            </div>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           <div className="mr-2 hidden items-center gap-4 md:flex">
-            <MiniStat icon={Zap} label="Traffic" value={`${Math.round(traffic)} req/s`} accent="cyan" />
-            <MiniStat icon={CircleDollarSign} label="Est. cost / mo" value={`$${result.totals.cost.toFixed(0)}`} accent="amber" />
+            <MiniStat
+              icon={Zap}
+              label="Tráfico"
+              value={`${Math.round(traffic)} req/s`}
+              accent="cyan"
+            />
+            <MiniStat
+              icon={CircleDollarSign}
+              label="Costo est. / mes"
+              value={`$${result.totals.cost.toFixed(0)}`}
+              accent="amber"
+            />
           </div>
           <Button
             size="sm"
             onClick={() => setRunning(true)}
             className="bg-[color:var(--neon-cyan)]/15 text-[color:var(--neon-cyan)] ring-1 ring-[color:var(--neon-cyan)]/50 hover:bg-[color:var(--neon-cyan)]/25"
           >
-            <Play className="mr-1.5 h-3.5 w-3.5" /> Run
+            <Play className="mr-1.5 h-3.5 w-3.5" /> Ejecutar
+          </Button>
+          <Button size="sm" variant="secondary" onClick={() => setRunning(false)}>
+            <Square className="mr-1.5 h-3.5 w-3.5" /> Detener
+          </Button>
+          <Button size="sm" variant="ghost" onClick={reset}>
+            <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Reiniciar
           </Button>
           <Button
             size="sm"
-            variant="secondary"
-            onClick={() => setRunning(false)}
+            variant="ghost"
+            onClick={deleteSelected}
+            disabled={!selected}
+            className="text-[color:var(--status-saturated)] hover:bg-[color:var(--status-saturated)]/10 hover:text-[color:var(--status-saturated)]"
           >
-            <Square className="mr-1.5 h-3.5 w-3.5" /> Stop
-          </Button>
-          <Button size="sm" variant="ghost" onClick={reset}>
-            <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Reset
+            <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Eliminar
           </Button>
           <Button size="sm" variant="ghost">
-            <Save className="mr-1.5 h-3.5 w-3.5" /> Save
+            <Save className="mr-1.5 h-3.5 w-3.5" /> Guardar
           </Button>
+          {user && (
+            <div className="ml-2 hidden items-center gap-2 border-l border-border/60 pl-3 md:flex">
+              <div className="text-right">
+                <div className="max-w-32 truncate text-xs font-semibold">{user.name}</div>
+                <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                  {user.role}
+                </div>
+              </div>
+              <Button size="sm" variant="ghost" onClick={onLogout} title="Cerrar sesión">
+                <LogOut className="mr-1.5 h-3.5 w-3.5" /> Salir
+              </Button>
+            </div>
+          )}
         </div>
       </header>
 
-      {/* ---------- Main 3-column layout ---------- */}
+      {/* ---------- Layout principal ---------- */}
       <div className="flex min-h-0 flex-1">
-        {/* Sidebar */}
+        {/* Panel lateral */}
         {leftOpen && (
           <>
             <aside
               style={{ width: leftWidth }}
               className="relative flex shrink-0 flex-col gap-4 overflow-y-auto border-r border-border/60 bg-panel/50 p-3"
             >
-          <div>
-            <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-              Component Library
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground/80">Drag onto the canvas</p>
-          </div>
-          {CATEGORIES.map((cat) => (
-            <div key={cat.name} className="space-y-2">
-              <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                {cat.name}
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                  Biblioteca de componentes
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground/80">Arrastrá al lienzo</p>
               </div>
-              <div className="space-y-1.5">
-                {cat.kinds.map((kind) => {
-                  const meta = KIND_META[kind];
-                  const Icon = NODE_ICON[kind];
-                  return (
-                    <div
-                      key={kind}
-                      draggable
-                      onDragStart={(e) => onLibDragStart(e, kind)}
-                      className="group flex cursor-grab items-center gap-2.5 rounded-md border border-border/60 bg-card/60 px-2.5 py-2 text-sm transition hover:border-[color:var(--neon-cyan)]/50 hover:bg-card active:cursor-grabbing"
-                    >
-                      <div
-                        className="flex h-7 w-7 items-center justify-center rounded-md ring-1"
-                        style={{
-                          backgroundColor: `color-mix(in oklab, ${meta.color} 12%, transparent)`,
-                          boxShadow: `0 0 0 1px color-mix(in oklab, ${meta.color} 40%, transparent)`,
-                        }}
-                      >
-                        <Icon className="h-3.5 w-3.5" style={{ color: meta.color }} />
-                      </div>
-                      <span className="flex-1 truncate">{meta.label}</span>
-                      <Plus className="h-3 w-3 text-muted-foreground opacity-0 transition group-hover:opacity-100" />
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+              {CATEGORIES.map((cat) => (
+                <div key={cat.name} className="space-y-2">
+                  <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                    {cat.name}
+                  </div>
+                  <div className="space-y-1.5">
+                    {cat.kinds.map((kind) => {
+                      const meta = KIND_META[kind];
+                      const Icon = NODE_ICON[kind];
+                      return (
+                        <div
+                          key={kind}
+                          draggable
+                          onDragStart={(e) => onLibDragStart(e, kind)}
+                          className="group flex cursor-grab items-center gap-2.5 rounded-md border border-border/60 bg-card/60 px-2.5 py-2 text-sm transition hover:border-[color:var(--neon-cyan)]/50 hover:bg-card active:cursor-grabbing"
+                        >
+                          <div
+                            className="flex h-7 w-7 items-center justify-center rounded-md ring-1"
+                            style={{
+                              backgroundColor: `color-mix(in oklab, ${meta.color} 12%, transparent)`,
+                              boxShadow: `0 0 0 1px color-mix(in oklab, ${meta.color} 40%, transparent)`,
+                            }}
+                          >
+                            <Icon className="h-3.5 w-3.5" style={{ color: meta.color }} />
+                          </div>
+                          <span className="flex-1 truncate">{meta.label}</span>
+                          <Plus className="h-3 w-3 text-muted-foreground opacity-0 transition group-hover:opacity-100" />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </aside>
-            {/* Left resize handle */}
+            {/* Control de tamaño izquierdo */}
             <ResizeHandle onMouseDown={startResize("left")} />
           </>
         )}
 
-        {/* Canvas + bottom metrics */}
+        {/* Lienzo + métricas inferiores */}
         <main className="relative flex min-w-0 flex-1 flex-col">
           <div
             ref={canvasRef}
@@ -291,13 +365,29 @@ export default function SimulatorDashboard() {
             onDrop={onCanvasDrop}
             className="canvas-grid relative flex-1 overflow-hidden"
           >
-            {/* SVG connections */}
+            {/* Conexiones SVG */}
             <svg className="pointer-events-none absolute inset-0 h-full w-full">
               <defs>
-                <marker id="arrow-cyan" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                <marker
+                  id="arrow-cyan"
+                  viewBox="0 0 10 10"
+                  refX="9"
+                  refY="5"
+                  markerWidth="6"
+                  markerHeight="6"
+                  orient="auto"
+                >
                   <path d="M0,0 L10,5 L0,10 z" fill="var(--neon-cyan)" />
                 </marker>
-                <marker id="arrow-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                <marker
+                  id="arrow-warn"
+                  viewBox="0 0 10 10"
+                  refX="9"
+                  refY="5"
+                  markerWidth="6"
+                  markerHeight="6"
+                  orient="auto"
+                >
                   <path d="M0,0 L10,5 L0,10 z" fill="var(--status-saturated)" />
                 </marker>
               </defs>
@@ -316,7 +406,13 @@ export default function SimulatorDashboard() {
                 const color = hot ? "var(--status-saturated)" : "var(--neon-cyan)";
                 return (
                   <g key={e.id}>
-                    <path d={path} stroke={color} strokeOpacity={0.25} strokeWidth={2} fill="none" />
+                    <path
+                      d={path}
+                      stroke={color}
+                      strokeOpacity={0.25}
+                      strokeWidth={2}
+                      fill="none"
+                    />
                     <path
                       d={path}
                       stroke={color}
@@ -332,7 +428,7 @@ export default function SimulatorDashboard() {
               })}
             </svg>
 
-            {/* Nodes */}
+            {/* Nodos */}
             {nodes.map((n) => {
               const m = result.perNode[n.id];
               const status = m?.status ?? "healthy";
@@ -350,13 +446,14 @@ export default function SimulatorDashboard() {
                     "cursor-grab active:cursor-grabbing",
                     styles.ring,
                     styles.glow,
-                    isSelected && "outline outline-2 outline-offset-2 outline-[color:var(--neon-cyan)]/70",
+                    isSelected &&
+                      "outline outline-2 outline-offset-2 outline-[color:var(--neon-cyan)]/70",
                   )}
                   style={{ left: n.x, top: n.y, width: NODE_W, height: NODE_H }}
                 >
                   {showAlert && (
                     <div className="alert-blink absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-[color:var(--status-saturated)]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[color:var(--status-saturated)] ring-1 ring-[color:var(--status-saturated)]/60">
-                      {status === "failed" ? "Component Crash" : "Traffic Overflow"}
+                      {status === "failed" ? "Componente caído" : "Tráfico excedido"}
                     </div>
                   )}
                   <div className="flex h-full flex-col justify-between p-3">
@@ -380,14 +477,16 @@ export default function SimulatorDashboard() {
                     </div>
 
                     <div>
-                      <div className="truncate text-[13px] font-semibold leading-tight">{n.name}</div>
+                      <div className="truncate text-[13px] font-semibold leading-tight">
+                        {n.name}
+                      </div>
                       <div className="font-mono text-[10px] text-muted-foreground">
                         {n.instances}× · {n.capacity} r/s
                       </div>
                     </div>
                   </div>
 
-                  {/* Load bar */}
+                  {/* Barra de carga */}
                   <div className="absolute inset-x-2 bottom-1 h-1 overflow-hidden rounded-full bg-border/60">
                     <div
                       className="h-full rounded-full transition-all"
@@ -409,13 +508,15 @@ export default function SimulatorDashboard() {
               );
             })}
 
-            {/* Traffic slider overlay */}
+            {/* Control de tráfico */}
             <div className="absolute left-4 top-4 w-72 rounded-lg border border-border/60 bg-panel/80 p-3 backdrop-blur">
               <div className="mb-2 flex items-center justify-between">
                 <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                  Incoming Traffic
+                  Tráfico entrante
                 </Label>
-                <span className="font-mono text-xs text-[color:var(--neon-cyan)]">{traffic} req/s</span>
+                <span className="font-mono text-xs text-[color:var(--neon-cyan)]">
+                  {traffic} req/s
+                </span>
               </div>
               <Slider
                 value={[traffic]}
@@ -427,34 +528,34 @@ export default function SimulatorDashboard() {
             </div>
           </div>
 
-          {/* Bottom metrics */}
+          {/* Métricas inferiores */}
           <div className="grid shrink-0 grid-cols-2 gap-3 border-t border-border/60 bg-panel/50 p-3 md:grid-cols-5">
             <Metric
-              label="Total Traffic"
+              label="Tráfico total"
               value={`${Math.round(traffic)} req/s`}
               icon={Zap}
               accent="cyan"
             />
             <Metric
-              label="Avg Latency"
+              label="Latencia prom."
               value={`${result.totals.avgLatency.toFixed(0)} ms`}
               icon={Activity}
               accent={result.totals.avgLatency > 200 ? "warn" : "cyan"}
             />
             <Metric
-              label="Throughput"
+              label="Rendimiento"
               value={`${result.totals.throughput.toFixed(0)} r/s`}
               icon={TrendingUp}
               accent="violet"
             />
             <Metric
-              label="Error Rate"
+              label="Tasa de error"
               value={`${(result.totals.errorRate * 100).toFixed(1)}%`}
               icon={AlertTriangle}
               accent={result.totals.errorRate > 0.05 ? "warn" : "cyan"}
             />
             <Metric
-              label="Est. Monthly Cost"
+              label="Costo mensual est."
               value={`$${result.totals.cost.toFixed(0)}`}
               icon={CircleDollarSign}
               accent="amber"
@@ -462,7 +563,7 @@ export default function SimulatorDashboard() {
           </div>
         </main>
 
-        {/* Right panel + handle */}
+        {/* Panel derecho + control */}
         {rightOpen && (
           <>
             <ResizeHandle onMouseDown={startResize("right")} />
@@ -470,88 +571,110 @@ export default function SimulatorDashboard() {
               style={{ width: rightWidth }}
               className="relative flex shrink-0 flex-col gap-4 overflow-y-auto border-l border-border/60 bg-panel/50 p-4"
             >
-          {selected ? (
-            <PropertiesPanel
-              node={selected}
-              onChange={updateSelected}
-              metrics={result.perNode[selected.id]}
-            />
-          ) : (
-            <div className="text-sm text-muted-foreground">Select a component to configure it.</div>
-          )}
-
-          {/* Alerts / recommendations */}
-          {bottleneck && bottleneckNode && bottleneckMetrics ? (
-            <div className="rounded-lg border border-[color:var(--status-saturated)]/50 bg-[color:var(--status-saturated)]/5 p-3">
-              <div className="mb-1 flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-[color:var(--status-saturated)]" />
-                <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--status-saturated)]">
-                  Bottleneck: {bottleneck.name}
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Load at <span className="font-mono text-foreground">{(bottleneckMetrics.load * 100).toFixed(0)}%</span>{" "}
-                · latency <span className="font-mono text-foreground">{bottleneckMetrics.latency.toFixed(0)}ms</span>.
-              </p>
-              {recommendedInstances > bottleneckNode.instances && (
-                <div className="mt-2 rounded-md bg-card/70 p-2 text-xs">
-                  <div className="text-foreground">
-                    Recommended: scale instances{" "}
-                    <span className="font-mono">
-                      {bottleneckNode.instances} → {recommendedInstances}
-                    </span>
-                  </div>
-                  <div className="font-mono text-[11px] text-[color:var(--neon-amber)]">
-                    Estimated extra cost: +${extraCost}/mo
-                  </div>
-                  <Button
-                    size="sm"
-                    className="mt-2 h-7 w-full bg-[color:var(--neon-cyan)]/15 text-[color:var(--neon-cyan)] ring-1 ring-[color:var(--neon-cyan)]/50 hover:bg-[color:var(--neon-cyan)]/25"
-                    onClick={() =>
-                      setNodes((prev) =>
-                        prev.map((n) =>
-                          n.id === bottleneckNode.id ? { ...n, instances: recommendedInstances } : n,
-                        ),
-                      )
-                    }
-                  >
-                    Apply recommendation
-                  </Button>
+              {selected ? (
+                <PropertiesPanel
+                  node={selected}
+                  onChange={updateSelected}
+                  onDelete={deleteSelected}
+                  metrics={result.perNode[selected.id]}
+                />
+              ) : (
+                <div className="text-sm text-muted-foreground">
+                  Seleccioná un componente para configurarlo.
                 </div>
               )}
-            </div>
-          ) : (
-            <div className="rounded-lg border border-border/60 bg-card/60 p-3">
-              <div className="mb-1 flex items-center gap-2">
-                <Activity className="h-4 w-4 text-[color:var(--neon-cyan)]" />
-                <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--neon-cyan)]">
-                  System healthy
+
+              {/* Alertas / recomendaciones */}
+              {bottleneck && bottleneckNode && bottleneckMetrics ? (
+                <div className="rounded-lg border border-[color:var(--status-saturated)]/50 bg-[color:var(--status-saturated)]/5 p-3">
+                  <div className="mb-1 flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-[color:var(--status-saturated)]" />
+                    <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--status-saturated)]">
+                      Cuello de botella: {bottleneck.name}
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Carga al{" "}
+                    <span className="font-mono text-foreground">
+                      {(bottleneckMetrics.load * 100).toFixed(0)}%
+                    </span>{" "}
+                    · latencia{" "}
+                    <span className="font-mono text-foreground">
+                      {bottleneckMetrics.latency.toFixed(0)}ms
+                    </span>
+                    .
+                  </p>
+                  {recommendedInstances > bottleneckNode.instances && (
+                    <div className="mt-2 rounded-md bg-card/70 p-2 text-xs">
+                      <div className="text-foreground">
+                        Recomendado: escalar instancias{" "}
+                        <span className="font-mono">
+                          {bottleneckNode.instances} → {recommendedInstances}
+                        </span>
+                      </div>
+                      <div className="font-mono text-[11px] text-[color:var(--neon-amber)]">
+                        Costo extra estimado: +${extraCost}/mes
+                      </div>
+                      <Button
+                        size="sm"
+                        className="mt-2 h-7 w-full bg-[color:var(--neon-cyan)]/15 text-[color:var(--neon-cyan)] ring-1 ring-[color:var(--neon-cyan)]/50 hover:bg-[color:var(--neon-cyan)]/25"
+                        onClick={() =>
+                          setNodes((prev) =>
+                            prev.map((n) =>
+                              n.id === bottleneckNode.id
+                                ? { ...n, instances: recommendedInstances }
+                                : n,
+                            ),
+                          )
+                        }
+                      >
+                        Aplicar recomendación
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-border/60 bg-card/60 p-3">
+                  <div className="mb-1 flex items-center gap-2">
+                    <Activity className="h-4 w-4 text-[color:var(--neon-cyan)]" />
+                    <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--neon-cyan)]">
+                      Sistema estable
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    No se detectaron cuellos de botella. Subí el tráfico para probar estrés.
+                  </p>
+                </div>
+              )}
+
+              {/* Costo por componente */}
+              <div>
+                <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                  Costo por componente
+                </div>
+                <div className="space-y-1.5">
+                  {nodes.map((n) => {
+                    const m = result.perNode[n.id];
+                    return (
+                      <div
+                        key={n.id}
+                        className="flex items-center justify-between rounded-md bg-card/60 px-2.5 py-1.5 text-xs"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={cn(
+                              "h-1.5 w-1.5 rounded-full",
+                              STATUS_STYLES[m?.status ?? "healthy"].dot,
+                            )}
+                          />
+                          <span className="truncate">{n.name}</span>
+                        </div>
+                        <span className="font-mono text-muted-foreground">${m?.cost ?? 0}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground">No bottlenecks detected. Increase traffic to stress-test.</p>
-            </div>
-          )}
-
-          {/* Per-component cost */}
-          <div>
-            <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-              Cost per component
-            </div>
-            <div className="space-y-1.5">
-              {nodes.map((n) => {
-                const m = result.perNode[n.id];
-                return (
-                  <div key={n.id} className="flex items-center justify-between rounded-md bg-card/60 px-2.5 py-1.5 text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_STYLES[m?.status ?? "healthy"].dot)} />
-                      <span className="truncate">{n.name}</span>
-                    </div>
-                    <span className="font-mono text-muted-foreground">${m?.cost ?? 0}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
             </aside>
           </>
         )}
@@ -561,7 +684,7 @@ export default function SimulatorDashboard() {
       <button
         type="button"
         onClick={() => setLeftOpen((v) => !v)}
-        title={leftOpen ? "Hide library" : "Show library"}
+        title={leftOpen ? "Ocultar biblioteca" : "Mostrar biblioteca"}
         className="fixed left-2 top-1/2 z-30 flex h-9 w-6 -translate-y-1/2 items-center justify-center rounded-r-md border border-l-0 border-border/60 bg-panel/90 text-muted-foreground shadow-lg backdrop-blur transition hover:bg-card hover:text-[color:var(--neon-cyan)]"
       >
         {leftOpen ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
@@ -569,7 +692,7 @@ export default function SimulatorDashboard() {
       <button
         type="button"
         onClick={() => setRightOpen((v) => !v)}
-        title={rightOpen ? "Hide properties" : "Show properties"}
+        title={rightOpen ? "Ocultar propiedades" : "Mostrar propiedades"}
         className="fixed right-2 top-1/2 z-30 flex h-9 w-6 -translate-y-1/2 items-center justify-center rounded-l-md border border-r-0 border-border/60 bg-panel/90 text-muted-foreground shadow-lg backdrop-blur transition hover:bg-card hover:text-[color:var(--neon-cyan)]"
       >
         {rightOpen ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
@@ -592,13 +715,21 @@ function MiniStat({
   accent: "cyan" | "amber" | "violet";
 }) {
   const color =
-    accent === "cyan" ? "var(--neon-cyan)" : accent === "amber" ? "var(--neon-amber)" : "var(--neon-violet)";
+    accent === "cyan"
+      ? "var(--neon-cyan)"
+      : accent === "amber"
+        ? "var(--neon-amber)"
+        : "var(--neon-violet)";
   return (
     <div className="flex items-center gap-2">
       <Icon className="h-3.5 w-3.5" style={{ color }} />
       <div className="flex items-baseline gap-1.5">
-        <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">{label}</span>
-        <span className="font-mono text-xs" style={{ color }}>{value}</span>
+        <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          {label}
+        </span>
+        <span className="font-mono text-xs" style={{ color }}>
+          {value}
+        </span>
       </div>
     </div>
   );
@@ -626,7 +757,9 @@ function Metric({
   return (
     <div className="rounded-lg border border-border/60 bg-card/60 p-3">
       <div className="mb-1.5 flex items-center justify-between">
-        <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">{label}</span>
+        <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          {label}
+        </span>
         <Icon className="h-3.5 w-3.5" style={{ color }} />
       </div>
       <div className="font-mono text-lg font-semibold tracking-tight" style={{ color }}>
@@ -639,11 +772,18 @@ function Metric({
 function PropertiesPanel({
   node,
   onChange,
+  onDelete,
   metrics,
 }: {
   node: SimNode;
   onChange: (patch: Partial<SimNode>) => void;
-  metrics?: { load: number; latency: number; throughput: number; status: "healthy" | "warning" | "saturated" | "failed" };
+  onDelete: () => void;
+  metrics?: {
+    load: number;
+    latency: number;
+    throughput: number;
+    status: "healthy" | "warning" | "saturated" | "failed";
+  };
 }) {
   const meta = KIND_META[node.kind];
   const Icon = NODE_ICON[node.kind];
@@ -678,12 +818,22 @@ function PropertiesPanel({
         </Badge>
       </div>
 
+      <Button
+        type="button"
+        variant="outline"
+        className="w-full border-[color:var(--status-saturated)]/45 bg-[color:var(--status-saturated)]/5 text-[color:var(--status-saturated)] hover:bg-[color:var(--status-saturated)]/10 hover:text-[color:var(--status-saturated)]"
+        onClick={onDelete}
+      >
+        <Trash2 className="h-4 w-4" />
+        Eliminar componente
+      </Button>
+
       <div className="space-y-3">
-        <Field label="Name">
+        <Field label="Nombre">
           <Input value={node.name} onChange={(e) => onChange({ name: e.target.value })} />
         </Field>
         <SliderField
-          label="Instances"
+          label="Instancias"
           value={node.instances}
           min={1}
           max={16}
@@ -692,7 +842,7 @@ function PropertiesPanel({
           unit="×"
         />
         <SliderField
-          label="Capacity (req/s per instance)"
+          label="Capacidad (req/s por instancia)"
           value={node.capacity}
           min={50}
           max={10000}
@@ -700,7 +850,7 @@ function PropertiesPanel({
           onChange={(v) => onChange({ capacity: v })}
         />
         <SliderField
-          label="Base latency"
+          label="Latencia base"
           value={node.baseLatency}
           min={1}
           max={300}
@@ -709,7 +859,7 @@ function PropertiesPanel({
           unit="ms"
         />
         <SliderField
-          label="Queue size"
+          label="Tamaño de cola"
           value={node.queueSize}
           min={0}
           max={2000}
@@ -717,7 +867,7 @@ function PropertiesPanel({
           onChange={(v) => onChange({ queueSize: v })}
         />
         <SliderField
-          label="Timeout"
+          label="Tiempo de espera"
           value={node.timeout}
           min={100}
           max={10000}
@@ -725,7 +875,7 @@ function PropertiesPanel({
           onChange={(v) => onChange({ timeout: v })}
           unit="ms"
         />
-        <Field label="Cost per instance ($/mo)">
+        <Field label="Costo por instancia ($/mes)">
           <Input
             type="number"
             value={node.costPerInstance}
@@ -736,9 +886,9 @@ function PropertiesPanel({
 
       {metrics && (
         <div className="grid grid-cols-3 gap-2 border-t border-border/60 pt-3">
-          <MiniMetric label="Load" value={`${(metrics.load * 100).toFixed(0)}%`} />
-          <MiniMetric label="Latency" value={`${metrics.latency.toFixed(0)}ms`} />
-          <MiniMetric label="Out" value={`${metrics.throughput.toFixed(0)}r/s`} />
+          <MiniMetric label="Carga" value={`${(metrics.load * 100).toFixed(0)}%`} />
+          <MiniMetric label="Latencia" value={`${metrics.latency.toFixed(0)}ms`} />
+          <MiniMetric label="Salida" value={`${metrics.throughput.toFixed(0)}r/s`} />
         </div>
       )}
     </div>
@@ -784,7 +934,13 @@ function SliderField({
           {unit ?? ""}
         </span>
       </div>
-      <Slider value={[value]} onValueChange={(v) => onChange(v[0])} min={min} max={max} step={step} />
+      <Slider
+        value={[value]}
+        onValueChange={(v) => onChange(v[0])}
+        min={min}
+        max={max}
+        step={step}
+      />
     </div>
   );
 }
@@ -792,7 +948,9 @@ function SliderField({
 function MiniMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-md bg-card/60 p-2 text-center">
-      <div className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">{label}</div>
+      <div className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
+        {label}
+      </div>
       <div className="font-mono text-xs text-foreground">{value}</div>
     </div>
   );
@@ -805,7 +963,7 @@ function ResizeHandle({ onMouseDown }: { onMouseDown: (e: React.MouseEvent) => v
       role="separator"
       aria-orientation="vertical"
       className="group relative z-10 w-1 shrink-0 cursor-col-resize bg-border/60 transition-colors hover:bg-[color:var(--neon-cyan)]/60"
-      title="Drag to resize"
+      title="Arrastrá para cambiar tamaño"
     >
       {/* Wider invisible hit area */}
       <div className="absolute inset-y-0 -left-1.5 -right-1.5" />

@@ -7,16 +7,16 @@ function NotFoundComponent() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-7xl font-bold text-foreground">404</h1>
-        <h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2>
+        <h2 className="mt-4 text-xl font-semibold text-foreground">Página no encontrada</h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          The page you're looking for doesn't exist or has been moved.
+          La página que estás buscando no existe o fue movida.
         </p>
         <div className="mt-6">
           <Link
             to="/"
             className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
-            Go home
+            Volver al inicio
           </Link>
         </div>
       </div>
@@ -29,18 +29,35 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Hazlo It Done is a distributed architecture simulator for visualizing and designing system components." },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Hazlo It Done is a distributed architecture simulator for visualizing and designing system components." },
+      { title: "Simulador de arquitectura distribuida" },
+      {
+        name: "description",
+        content: "Sistema MVC para disenar, simular y validar arquitecturas distribuidas.",
+      },
+      { name: "author", content: "Grupo 09" },
+      { property: "og:title", content: "Simulador de arquitectura distribuida" },
+      {
+        property: "og:description",
+        content: "Sistema MVC para disenar, simular y validar arquitecturas distribuidas.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
-      { name: "twitter:title", content: "Lovable App" },
-      { name: "twitter:description", content: "Hazlo It Done is a distributed architecture simulator for visualizing and designing system components." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/2ecd86dc-f17a-4610-add8-d91854a32301/id-preview-325a1978--3acf0553-17f2-4086-abd6-116f5d55c091.lovable.app-1776460765211.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/2ecd86dc-f17a-4610-add8-d91854a32301/id-preview-325a1978--3acf0553-17f2-4086-abd6-116f5d55c091.lovable.app-1776460765211.png" },
+      { name: "twitter:site", content: "@grupo09" },
+      { name: "twitter:title", content: "Simulador de arquitectura distribuida" },
+      {
+        name: "twitter:description",
+        content: "Sistema MVC para disenar, simular y validar arquitecturas distribuidas.",
+      },
+      {
+        property: "og:image",
+        content:
+          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/2ecd86dc-f17a-4610-add8-d91854a32301/id-preview-325a1978--3acf0553-17f2-4086-abd6-116f5d55c091.lovable.app-1776460765211.png",
+      },
+      {
+        name: "twitter:image",
+        content:
+          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/2ecd86dc-f17a-4610-add8-d91854a32301/id-preview-325a1978--3acf0553-17f2-4086-abd6-116f5d55c091.lovable.app-1776460765211.png",
+      },
     ],
     links: [
       {
@@ -56,7 +73,7 @@ export const Route = createRootRoute({
 
 function RootShell({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="es">
       <head>
         <HeadContent />
       </head>
