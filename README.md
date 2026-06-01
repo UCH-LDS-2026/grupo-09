@@ -38,10 +38,11 @@ Ya se implementó:
 - Detección de componentes saturados o fallando.
 - Recomendaciones básicas de escalado.
 - Documentación inicial de arquitectura.
-- Estructura inicial para backend con Node.js.
+- Backend inicial con Node.js, Express y endpoints de health.
+- Conexión configurada para MySQL desde el backend.
 - Script SQL inicial para la base de datos.
 
-Todavía falta conectar el backend real, la base de datos y la persistencia de proyectos.
+Todavía falta conectar el frontend con la API, usar la base de datos en los flujos reales y agregar persistencia de proyectos.
 
 ## Funcionalidades principales
 
@@ -60,11 +61,9 @@ Todavía falta conectar el backend real, la base de datos y la persistencia de p
 
 ## Funcionalidades pendientes
 
-- Implementar backend real con Node.js.
-- Crear servidor principal del backend.
 - Crear endpoints de autenticación.
 - Conectar el login con el backend.
-- Conectar el sistema con MySQL.
+- Conectar los flujos reales del sistema con MySQL.
 - Persistir usuarios en base de datos.
 - Crear, guardar y listar proyectos.
 - Guardar nodos y conexiones del diagrama.
@@ -161,9 +160,11 @@ Estado actual del backend:
 - La estructura de carpetas ya fue creada.
 - El package.json del backend ya existe.
 - El archivo .env.example ya existe.
-- Todavía no se implementó el servidor principal.
-- Todavía no hay endpoints.
-- Todavía no está conectado a MySQL.
+- El servidor principal ya existe en `backend/src/server.js`.
+- La aplicación Express ya existe en `backend/src/app.js`.
+- Ya existen endpoints de health: `GET /health`, `GET /health/db` y `GET /api/health`.
+- La conexión a MySQL está configurada en `backend/src/config/database.js`.
+- Todavía faltan endpoints de autenticación, usuarios, proyectos, nodos, conexiones y simulaciones.
 
 ## Base de datos
 
@@ -211,119 +212,337 @@ docs/
 node v22.21.1
 npm 10.9.4
 mysql 8.0
+express 5.2.1
+mysql2 3.22.4
+vite 7.3.3
+react 19.2.6
+typescript 5.9.3
 
-## Instalación del proyecto
+## Fase 1 - Base del proyecto
+
+Esta fase deja el proyecto listo para trabajar con frontend, backend y documentación mínima de comandos.
+
+### Qué se revisó
+
+- `.gitignore` ya ignora dependencias, builds, variables de entorno, logs y archivos temporales.
+- `node_modules/` no se debe subir al repositorio.
+- `dist/` no se debe editar manualmente ni usar como fuente de cambios.
+- `.env` no se debe subir al repositorio.
+- Los archivos `.env.example` sí se pueden subir porque documentan variables sin secretos.
+- Los lockfiles `package-lock.json` y `backend/package-lock.json` sí conviene mantenerlos para instalar las mismas versiones.
+- El backend ya tiene servidor Express y endpoints de health.
+- El frontend arranca correctamente con Vite.
+- El backend instala sus dependencias correctamente.
+
+### Comandos generales
+
+Ver versión de Node:
+
+```bash
+node --version
+```
+
+Ver versión de npm:
+
+```bash
+npm --version
+```
+
+Ver estado de Git:
+
+```bash
+git status
+```
+
+### Instalación del frontend
 
 Desde la raíz del proyecto, instalar las dependencias:
 
+```bash
 npm install
+```
 
 ## Cómo iniciar el frontend
 
 Desde la raíz del proyecto:
 
+```bash
 npm run dev
+```
 
 El frontend queda disponible en:
 
+```txt
 http://localhost:8080/
+```
 
 Credenciales demo:
 
+```txt
 admin@sistema.test / admin123
 arquitecto@sistema.test / demo1234
+```
+
+Para verificar que el frontend arranca sin dejarlo corriendo:
+
+```bash
+timeout 5s npm run dev -- --host 127.0.0.1
+```
+
+Si el frontend está bien, se debe ver un mensaje parecido a:
+
+```txt
+VITE v7.3.3 ready
+Local: http://127.0.0.1:8080/
+```
+
+### Comandos útiles del frontend
+
+Ejecutar lint:
+
+```bash
+npm run lint
+```
+
+Generar build de producción:
+
+```bash
+npm run build
+```
+
+Previsualizar el build:
+
+```bash
+npm run preview
+```
 
 ## Cómo iniciar el backend
 
-El backend todavía no tiene servidor implementado.
+El backend se encuentra en:
 
-La carpeta ya existe y está preparada en:
-
+```txt
 backend/
+```
 
-Cuando se implemente el servidor principal, se podrá iniciar entrando a la carpeta backend:
+Instalar dependencias del backend:
 
+```bash
 cd backend
+npm install
+```
 
-Y luego ejecutando:
+Iniciar backend en modo desarrollo:
 
+```bash
+cd backend
 npm run dev
+```
 
-Por ahora este comando está preparado en el package.json del backend, pero falta crear el archivo principal del servidor.
+Por defecto queda disponible en:
+
+```txt
+http://localhost:3001/
+```
+
+Endpoints disponibles en esta fase:
+
+```txt
+GET http://localhost:3001/health
+GET http://localhost:3001/health/db
+GET http://localhost:3001/api/health
+```
+
+Ejemplo para probar health:
+
+```bash
+curl http://localhost:3001/health
+```
+
+Ejemplo para probar conexión con base de datos:
+
+```bash
+curl http://localhost:3001/health/db
+```
+
+Si MySQL no está iniciado o las credenciales no coinciden, `/health/db` devuelve error `503`.
 
 ## Cómo preparar la base de datos
 
 La base de datos está definida en:
 
+```txt
 database/schema.sql
+```
 
 Para usarla, se debe ejecutar ese script en MySQL.
 
-Ejemplo esperado:
+Ejemplo:
 
+```bash
 mysql -u root -p < database/schema.sql
+```
 
-Esto creará la base de datos softwareestres y sus tablas principales.
+Variables esperadas por el backend:
 
-## Comandos útiles
+```txt
+NODE_ENV=development
+API_PORT=3001
+CORS_ORIGIN=http://localhost:8080
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_NAME=softwareestres
+DB_USER=root
+DB_PASSWORD=tu_contraseña
+```
 
-Instalar dependencias del frontend:
+Estas variables están documentadas en:
 
-npm install
+```txt
+backend/.env.example
+```
 
-Levantar frontend:
+Para trabajar localmente, crear un archivo `.env` dentro de `backend/` con esos valores ajustados a la PC.
 
-npm run dev
+## Verificación de la Fase 1
 
-Generar build:
+Resultado de la revisión:
 
-npm run build
+- Frontend: arranca correctamente en `http://127.0.0.1:8080/`.
+- Backend: dependencias instaladas correctamente.
+- Backend: `GET /health` responde `200`.
+- Backend: `GET /health/db` puede responder `503` hasta configurar MySQL y `backend/.env`; en Fase 2 quedó validado en `200`.
+- Lint frontend: `0` errores y `7` warnings de Fast Refresh.
+- `.gitignore`: cubre dependencias, builds, logs y variables de entorno.
 
-Ejecutar lint:
+Warnings actuales de lint:
 
-npm run lint
+```txt
+react-refresh/only-export-components
+```
 
-Entrar al backend:
+Estos warnings no frenan el proyecto, pero se pueden limpiar más adelante separando constantes o helpers de algunos componentes UI.
 
+## Fase 2 - Backend y base de datos
+
+Esta fase deja validada la conexión entre el backend y MySQL.
+
+### Datos locales usados
+
+```txt
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_NAME=softwareestres
+DB_USER=root
+```
+
+La contraseña real va solamente en `backend/.env`. No se sube al repositorio.
+
+### Archivo local del backend
+
+Crear este archivo:
+
+```txt
+backend/.env
+```
+
+Contenido esperado:
+
+```txt
+NODE_ENV=development
+API_PORT=3001
+CORS_ORIGIN=http://localhost:8080
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_NAME=softwareestres
+DB_USER=root
+DB_PASSWORD=tu_contraseña
+```
+
+### Verificar MySQL
+
+Ver versión de MySQL y confirmar que existe la base:
+
+```bash
+MYSQL_PWD='tu_contraseña' mysql -h 127.0.0.1 -P 3306 -u root -e "SELECT VERSION() AS mysql_version; SHOW DATABASES LIKE 'softwareestres';"
+```
+
+Verificar tablas y datos base:
+
+```bash
+MYSQL_PWD='tu_contraseña' mysql -h 127.0.0.1 -P 3306 -u root softwareestres -e "SELECT COUNT(*) AS tables_count FROM information_schema.tables WHERE table_schema = 'softwareestres'; SELECT COUNT(*) AS component_types_count FROM component_types; SELECT COUNT(*) AS objective_types_count FROM objective_types;"
+```
+
+Resultado esperado:
+
+```txt
+tables_count: 11
+component_types_count: 6
+objective_types_count: 4
+```
+
+### Cargar o actualizar schema
+
+Si la base no existe o faltan tablas, ejecutar desde la raíz:
+
+```bash
+MYSQL_PWD='tu_contraseña' mysql -h 127.0.0.1 -P 3306 -u root < database/schema.sql
+```
+
+El script usa `CREATE DATABASE IF NOT EXISTS` y `CREATE TABLE IF NOT EXISTS`, por eso se puede ejecutar de forma segura para preparar la base.
+
+### Verificar conexión desde backend
+
+Desde la raíz del proyecto:
+
+```bash
+node -e "import('./backend/src/services/database-health.service.js').then(async ({databaseHealthService}) => { const {closeDatabasePool} = await import('./backend/src/config/database.js'); try { console.log(JSON.stringify(await databaseHealthService.getStatus())); } finally { await closeDatabasePool(); } });"
+```
+
+Resultado esperado:
+
+```txt
+{"status":"ok","database":"softwareestres","host":"127.0.0.1","latencyMs":...}
+```
+
+También se puede verificar levantando el backend:
+
+```bash
 cd backend
-
-Levantar backend cuando esté implementado:
-
 npm run dev
+```
 
-## Estado resumido
+Y en otra terminal:
 
-Frontend:
-- Funcional en desarrollo.
-- Tiene login demo.
-- Tiene simulador visual.
-- Tiene agregado y eliminación de componentes.
-- Tiene métricas y alertas visuales.
+```bash
+curl http://localhost:3001/health
+curl http://localhost:3001/health/db
+```
 
-Backend:
-- Solo tiene estructura inicial.
-- Falta implementar servidor, rutas, controladores, servicios y modelos.
+### Verificación de la Fase 2
 
-Base de datos:
-- Tiene script SQL inicial.
-- Falta conectarla con el backend.
+Resultado de la revisión:
 
-Documentación:
-- Tiene documentación inicial de arquitectura.
-- Tiene diagramas y README de base de datos.
+- MySQL local responde en `127.0.0.1:3306`.
+- Versión detectada: `8.0.45-0ubuntu0.24.04.1`.
+- La base `softwareestres` existe.
+- El schema tiene `11` tablas.
+- Hay `6` tipos de componentes cargados.
+- Hay `4` tipos de objetivos cargados.
+- `backend/.env` quedó creado localmente y está ignorado por Git.
+- `backend/.env.example` usa `DB_HOST=127.0.0.1` como referencia local.
+- El backend puede cargar `backend/.env` incluso si se ejecuta una verificación desde la raíz del proyecto.
+- La conexión del backend con MySQL responde `status: ok`.
 
 ## Nota importante
 
-La carpeta dist/ contiene archivos generados por el build. No debe modificarse manualmente.
+La carpeta `dist/` contiene archivos generados por el build. No debe modificarse manualmente.
 
 Los cambios reales del sistema deben hacerse en:
 
+```txt
 src/
 backend/
 database/
 docs/
-
-```bash
-node v22.21.1
-npm 10.9.4
-mysql 8.0
+README.md
+```
