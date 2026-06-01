@@ -40,6 +40,9 @@ Ya se implementó:
 - Documentación inicial de arquitectura.
 - Backend inicial con Node.js, Express y endpoints de health.
 - Conexión configurada para MySQL desde el backend.
+- API inicial para guardar, listar, cargar y actualizar proyectos.
+- Persistencia de nodos y conexiones del diagrama en MySQL.
+- Botón Guardar conectado al backend.
 - Script SQL inicial para la base de datos.
 
 Todavía falta conectar el frontend con la API, usar la base de datos en los flujos reales y agregar persistencia de proyectos.
@@ -65,9 +68,6 @@ Todavía falta conectar el frontend con la API, usar la base de datos en los flu
 - Conectar el login con el backend.
 - Conectar los flujos reales del sistema con MySQL.
 - Persistir usuarios en base de datos.
-- Crear, guardar y listar proyectos.
-- Guardar nodos y conexiones del diagrama.
-- Cargar proyectos previamente guardados.
 - Guardar historial de simulaciones.
 - Persistir métricas de cada corrida.
 - Implementar recomendaciones de escalado desde backend.
@@ -532,6 +532,98 @@ Resultado de la revisión:
 - `backend/.env.example` usa `DB_HOST=127.0.0.1` como referencia local.
 - El backend puede cargar `backend/.env` incluso si se ejecuta una verificación desde la raíz del proyecto.
 - La conexión del backend con MySQL responde `status: ok`.
+
+## Fase 3 - Persistencia principal
+
+Esta fase conecta el simulador con MySQL para guardar y cargar proyectos reales.
+
+### Qué se implementó
+
+- API de proyectos en el backend.
+- Creación automática del usuario demo en MySQL al guardar un proyecto.
+- Guardado de proyecto, tráfico, estado de ejecución, nodos y conexiones.
+- Listado de proyectos guardados por usuario.
+- Carga de un proyecto guardado con sus nodos y conexiones.
+- Actualización de un proyecto existente al volver a presionar `Guardar`.
+- Botón `Guardar` conectado al backend desde el simulador.
+- Selector de proyectos guardados en la barra superior del simulador.
+- Nombre de proyecto editable antes de guardar.
+
+### Endpoints agregados
+
+```txt
+GET  /api/projects?userEmail=correo@ejemplo.com
+POST /api/projects
+GET  /api/projects/:id
+PUT  /api/projects/:id
+```
+
+### Archivos principales de la fase
+
+```txt
+backend/src/routes/projects.routes.js
+backend/src/controllers/projects.controller.js
+backend/src/services/projects.service.js
+src/services/projectService.ts
+src/components/SimulatorDashboard.tsx
+```
+
+### Cómo probarlo desde la app
+
+1. Levantar el backend:
+
+```bash
+cd backend
+npm run dev
+```
+
+2. Levantar el frontend:
+
+```bash
+npm run dev
+```
+
+3. Entrar con usuario demo:
+
+```txt
+admin@sistema.test / admin123
+```
+
+4. Cambiar el nombre del proyecto en la barra superior.
+5. Mover o editar algún componente.
+6. Presionar `Guardar`.
+7. Reiniciar o recargar la app.
+8. Usar el selector `Proyectos guardados` para cargar el proyecto.
+
+### Cómo probar la API con curl
+
+Listar proyectos de un usuario:
+
+```bash
+curl "http://localhost:3001/api/projects?userEmail=admin@sistema.test"
+```
+
+Obtener un proyecto por id:
+
+```bash
+curl "http://localhost:3001/api/projects/1"
+```
+
+### Verificación de la Fase 3
+
+Resultado de la revisión:
+
+- TypeScript: `npx tsc --noEmit` sin errores.
+- Lint: `0` errores y `7` warnings conocidos de Fast Refresh.
+- Servicio de proyectos probado contra MySQL:
+  - crear proyecto: ok
+  - listar proyecto: ok
+  - cargar proyecto: ok
+  - actualizar proyecto: ok
+- Endpoints HTTP probados:
+  - `POST /api/projects`: `201`
+  - `GET /api/projects`: `200`
+  - `GET /api/projects/:id`: `200`
 
 ## Nota importante
 

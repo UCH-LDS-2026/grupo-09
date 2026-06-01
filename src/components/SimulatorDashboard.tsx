@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   KIND_META,
   makeNode,
@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AuthUser } from "@/models/auth";
+import { projectService, type ProjectSummary } from "@/services/projectService";
 
 // ---------- Arquitectura inicial de ejemplo ----------
 const initialNodes: SimNode[] = [
@@ -100,6 +101,13 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
   const [selectedId, setSelectedId] = useState<string | null>("n_app");
   const [traffic, setTraffic] = useState(600);
   const [running, setRunning] = useState(true);
+  const [projectId, setProjectId] = useState<number | null>(null);
+  const [projectName, setProjectName] = useState("plataforma-checkout.v1");
+  const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [isLoadingProjects, setIsLoadingProjects] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [persistenceMessage, setPersistenceMessage] = useState<string | null>(null);
+  const [persistenceError, setPersistenceError] = useState<string | null>(null);
   const [leftWidth, setLeftWidth] = useState(256);
   const [rightWidth, setRightWidth] = useState(320);
   const [leftOpen, setLeftOpen] = useState(true);
@@ -144,6 +152,26 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
     [nodes, edges, traffic, running],
   );
   const selected = nodes.find((n) => n.id === selectedId) ?? null;
+
+  const refreshProjects = useCallback(async () => {
+    if (!user?.email) return;
+
+    setIsLoadingProjects(true);
+    try {
+      const savedProjects = await projectService.list(user.email);
+      setProjects(savedProjects);
+    } catch (error) {
+      setPersistenceError(
+        error instanceof Error ? error.message : "No se pudieron listar proyectos.",
+      );
+    } finally {
+      setIsLoadingProjects(false);
+    }
+  }, [user?.email]);
+
+  useEffect(() => {
+    void refreshProjects();
+  }, [refreshProjects]);
 
   // ---------- Drag nodes on canvas ----------
   const onNodeMouseDown = (e: React.MouseEvent, n: SimNode) => {
@@ -191,6 +219,61 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
     setNodes((prev) => prev.map((n) => (n.id === selected.id ? { ...n, ...patch } : n)));
   };
 
+  const loadProject = async (id: number) => {
+    setPersistenceError(null);
+    setPersistenceMessage(null);
+
+    try {
+      const project = await projectService.get(id);
+      setProjectId(project.id);
+      setProjectName(project.name);
+      setTraffic(project.incomingTrafficRps);
+      setRunning(project.isRunning);
+      setNodes(project.nodes);
+      setEdges(project.edges);
+      setSelectedId(project.nodes[0]?.id ?? null);
+      setPersistenceMessage("Proyecto cargado.");
+    } catch (error) {
+      setPersistenceError(
+        error instanceof Error ? error.message : "No se pudo cargar el proyecto.",
+      );
+    }
+  };
+
+  const saveProject = async () => {
+    if (!user) {
+      setPersistenceError("Iniciá sesión para guardar proyectos.");
+      return;
+    }
+
+    setIsSaving(true);
+    setPersistenceError(null);
+    setPersistenceMessage(null);
+
+    try {
+      const project = await projectService.save({
+        id: projectId,
+        user,
+        name: projectName,
+        traffic,
+        running,
+        nodes,
+        edges,
+      });
+
+      setProjectId(project.id);
+      setProjectName(project.name);
+      setPersistenceMessage("Proyecto guardado.");
+      await refreshProjects();
+    } catch (error) {
+      setPersistenceError(
+        error instanceof Error ? error.message : "No se pudo guardar el proyecto.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const deleteSelected = () => {
     if (!selected) return;
     const selectedNodeId = selected.id;
@@ -202,11 +285,15 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
   };
 
   const reset = () => {
+    setProjectId(null);
+    setProjectName("plataforma-checkout.v1");
     setNodes(initialNodes);
     setEdges(initialEdges);
     setTraffic(600);
     setRunning(true);
     setSelectedId("n_app");
+    setPersistenceMessage(null);
+    setPersistenceError(null);
   };
 
   const bottleneck = result.totals.bottleneck;
@@ -235,13 +322,48 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
             <div className="text-sm font-semibold tracking-tight">
               Simulador de arquitectura distribuida
             </div>
-            <div className="font-mono text-[11px] text-muted-foreground">
-              proyecto / plataforma-checkout.v1
+            <div className="mt-0.5 flex items-center gap-2 font-mono text-[11px] text-muted-foreground">
+              <span>proyecto /</span>
+              <Input
+                value={projectName}
+                onChange={(event) => setProjectName(event.target.value)}
+                className="h-6 w-56 border-border/50 bg-card/50 px-2 font-mono text-[11px]"
+              />
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
+          {(persistenceMessage || persistenceError) && (
+            <span
+              className={cn(
+                "hidden max-w-44 truncate font-mono text-[11px] xl:inline",
+                persistenceError
+                  ? "text-[color:var(--status-saturated)]"
+                  : "text-[color:var(--neon-cyan)]",
+              )}
+              title={persistenceError ?? persistenceMessage ?? undefined}
+            >
+              {persistenceError ?? persistenceMessage}
+            </span>
+          )}
+          <select
+            value={projectId ?? ""}
+            onChange={(event) => {
+              const nextProjectId = Number(event.target.value);
+              if (nextProjectId) void loadProject(nextProjectId);
+            }}
+            disabled={isLoadingProjects || !projects.length}
+            className="hidden h-8 max-w-48 rounded-md border border-border/60 bg-card/70 px-2 font-mono text-[11px] text-foreground outline-none transition hover:border-[color:var(--neon-cyan)]/50 disabled:cursor-not-allowed disabled:opacity-50 lg:block"
+            title="Cargar proyecto guardado"
+          >
+            <option value="">Proyectos guardados</option>
+            {projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))}
+          </select>
           <div className="mr-2 hidden items-center gap-4 md:flex">
             <MiniStat
               icon={Zap}
@@ -278,8 +400,8 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
           >
             <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Eliminar
           </Button>
-          <Button size="sm" variant="ghost">
-            <Save className="mr-1.5 h-3.5 w-3.5" /> Guardar
+          <Button size="sm" variant="ghost" onClick={saveProject} disabled={isSaving}>
+            <Save className="mr-1.5 h-3.5 w-3.5" /> {isSaving ? "Guardando..." : "Guardar"}
           </Button>
           {user && (
             <div className="ml-2 hidden items-center gap-2 border-l border-border/60 pl-3 md:flex">
