@@ -25,7 +25,8 @@ function normalizeUser(user = {}) {
     .trim()
     .toLowerCase();
   const name = String(user.name ?? "Usuario Demo").trim() || "Usuario Demo";
-  const role = user.role === "admin" ? "admin" : "user";
+  const validRoles = new Set(["admin", "architect", "viewer"]);
+  const role = validRoles.has(user.role) ? user.role : "architect";
 
   if (!email) {
     throw createHttpError(400, "El email del usuario es obligatorio para guardar proyectos.");
@@ -249,8 +250,14 @@ export const projectsService = {
     return rows.map(mapProjectRow);
   },
 
-  async getProject(projectId) {
+  async getProject(projectId, userEmail) {
     const pool = getDatabasePool();
+    const userId = await getUserIdForList(pool, userEmail);
+
+    if (!userId) {
+      throw createHttpError(404, "Proyecto no encontrado para este usuario.");
+    }
+
     const [projectRows] = await pool.execute(
       `SELECT
         id,
@@ -263,12 +270,13 @@ export const projectsService = {
         updated_at
       FROM projects
       WHERE id = ?
+        AND user_id = ?
       LIMIT 1`,
-      [projectId],
+      [projectId, userId],
     );
 
     if (!projectRows.length) {
-      throw createHttpError(404, "Proyecto no encontrado.");
+      throw createHttpError(404, "Proyecto no encontrado para este usuario.");
     }
 
     const [nodeRows] = await pool.execute(
@@ -345,12 +353,32 @@ export const projectsService = {
       await replaceProjectNodesAndEdges(connection, projectId, payload.nodes, payload.edges);
       await connection.commit();
 
-      return this.getProject(projectId);
+      return this.getProject(projectId, payload.user.email);
     } catch (error) {
       await connection.rollback();
       throw error;
     } finally {
       connection.release();
     }
+  },
+
+  async deleteProject(projectId, userEmail) {
+    const pool = getDatabasePool();
+    const userId = await getUserIdForList(pool, userEmail);
+
+    if (!userId) {
+      throw createHttpError(404, "Proyecto no encontrado para este usuario.");
+    }
+
+    const [result] = await pool.execute("DELETE FROM projects WHERE id = ? AND user_id = ?", [
+      projectId,
+      userId,
+    ]);
+
+    if (!result.affectedRows) {
+      throw createHttpError(404, "Proyecto no encontrado para este usuario.");
+    }
+
+    return { deleted: true };
   },
 };

@@ -30,6 +30,8 @@ export interface SimEdge {
 }
 
 export interface NodeMetrics {
+  incoming: number; // req/s offered to this node
+  capacity: number; // req/s total installed capacity
   load: number; // 0..>1 (utilization)
   throughput: number; // req/s actually served
   latency: number; // ms effective
@@ -48,6 +50,15 @@ export interface SimResult {
     bottleneck?: { id: string; name: string };
   };
 }
+
+export const ALLOWED_CONNECTIONS: Record<NodeKind, NodeKind[]> = {
+  api_gateway: ["load_balancer", "app_service"],
+  load_balancer: ["app_service"],
+  app_service: ["app_service", "database", "cache", "queue"],
+  queue: ["app_service"],
+  cache: ["database"],
+  database: [],
+};
 
 export const KIND_META: Record<
   NodeKind,
@@ -150,11 +161,93 @@ export function makeNode(kind: NodeKind, x: number, y: number, idx = 1): SimNode
   };
 }
 
-export function statusFor(load: number): NodeStatus {
-  if (load >= 1.25) return "failed";
+export function canConnect(sourceKind: NodeKind, targetKind: NodeKind): boolean {
+  return ALLOWED_CONNECTIONS[sourceKind]?.includes(targetKind) ?? false;
+}
+
+function createsCycle(fromId: string, toId: string, edges: SimEdge[]): boolean {
+  const outgoing: Record<string, string[]> = {};
+  edges.forEach((edge) => {
+    outgoing[edge.from] = [...(outgoing[edge.from] ?? []), edge.to];
+  });
+  outgoing[fromId] = [...(outgoing[fromId] ?? []), toId];
+
+  const visited = new Set<string>();
+  const stack = [toId];
+
+  while (stack.length) {
+    const current = stack.pop();
+    if (!current) continue;
+    if (current === fromId) return true;
+    if (visited.has(current)) continue;
+
+    visited.add(current);
+    stack.push(...(outgoing[current] ?? []));
+  }
+
+  return false;
+}
+
+export function validateConnection(
+  source: SimNode | undefined,
+  target: SimNode | undefined,
+  edges: SimEdge[],
+): { valid: true; isAsync: boolean } | { valid: false; message: string } {
+  if (!source || !target) {
+    return { valid: false, message: "Origen o destino inválido." };
+  }
+
+  if (source.id === target.id) {
+    return { valid: false, message: "No se puede conectar un componente consigo mismo." };
+  }
+
+  const alreadyExists = edges.some((edge) => edge.from === source.id && edge.to === target.id);
+  if (alreadyExists) {
+    return { valid: false, message: "La conexión ya existe." };
+  }
+
+  if (!canConnect(source.kind, target.kind)) {
+    return {
+      valid: false,
+      message: connectionErrorMessage(source.kind),
+    };
+  }
+
+  if (createsCycle(source.id, target.id, edges)) {
+    return { valid: false, message: "La conexión generaría un ciclo no válido para este MVP." };
+  }
+
+  return { valid: true, isAsync: source.kind === "app_service" && target.kind === "queue" };
+}
+
+function connectionErrorMessage(sourceKind: NodeKind): string {
+  if (sourceKind === "load_balancer") {
+    return "Un balanceador de carga solo puede distribuir tráfico hacia servicios de aplicación.";
+  }
+
+  if (sourceKind === "database") {
+    return "La base de datos no puede ser origen de tráfico en este MVP.";
+  }
+
+  if (sourceKind === "api_gateway") {
+    return "La puerta de enlace solo puede enviar tráfico hacia un balanceador o servicio.";
+  }
+
+  return "Esta conexión no es válida para esta arquitectura.";
+}
+
+export function statusFor(load: number, errorRate = 0): NodeStatus {
+  if (errorRate >= 0.5) return "failed";
   if (load >= 1.0) return "saturated";
-  if (load >= 0.75) return "warning";
+  if (load >= 0.7) return "warning";
   return "healthy";
+}
+
+export function calculateLatency(baseLatency: number, load: number): number {
+  if (load < 0.7) return baseLatency;
+  if (load < 0.9) return Math.round(baseLatency * 1.5);
+  if (load <= 1) return Math.round(baseLatency * 2);
+  return Math.round(baseLatency * 3);
 }
 
 /**
@@ -175,7 +268,13 @@ export function simulate(nodes: SimNode[], edges: SimEdge[], trafficRps: number)
     if (outgoing[e.from]) outgoing[e.from].push(e);
   });
 
-  const sources = nodes.filter((n) => incoming[n.id].length === 0);
+  const gatewaySources = nodes.filter((n) => n.kind === "api_gateway");
+  const fallbackSources = nodes.filter((n) => incoming[n.id].length === 0);
+  const sources = gatewaySources.length
+    ? gatewaySources
+    : fallbackSources.length
+      ? fallbackSources
+      : nodes.slice(0, 1);
   const offered: Record<string, number> = {};
   nodes.forEach((n) => (offered[n.id] = 0));
   sources.forEach((n) => (offered[n.id] = trafficRps / Math.max(sources.length, 1)));
@@ -205,8 +304,6 @@ export function simulate(nodes: SimNode[], edges: SimEdge[], trafficRps: number)
 
   const perNode: Record<string, NodeMetrics> = {};
   let weightedLatency = 0;
-  let totalThroughput = 0;
-  let totalErrors = 0;
   let totalCost = 0;
   let bottleneck: { id: string; name: string; load: number } | undefined;
 
@@ -214,16 +311,24 @@ export function simulate(nodes: SimNode[], edges: SimEdge[], trafficRps: number)
     const totalCap = n.capacity * n.instances;
     const load = totalCap > 0 ? offered[n.id] / totalCap : 0;
     const throughput = Math.min(offered[n.id], totalCap);
-    // latency grows quadratically as we approach saturation
-    const latency = n.baseLatency * (1 + Math.pow(Math.min(load, 1.5), 2) * 6);
-    const errorRate = load <= 1 ? 0 : Math.min((load - 1) / load, 0.95);
-    const status = statusFor(load);
+    const errorRate = offered[n.id] > 0 ? Math.max(0, offered[n.id] - totalCap) / offered[n.id] : 0;
+    const latency = calculateLatency(n.baseLatency, load);
+    const status = statusFor(load, errorRate);
     const cost = n.costPerInstance * n.instances;
 
-    perNode[n.id] = { load, throughput, latency, errorRate, status, cost };
-    weightedLatency += latency * Math.max(throughput, 1);
-    totalThroughput += throughput;
-    totalErrors += errorRate * Math.max(offered[n.id], 0);
+    perNode[n.id] = {
+      incoming: offered[n.id],
+      capacity: totalCap,
+      load,
+      throughput,
+      latency,
+      errorRate,
+      status,
+      cost,
+    };
+    if (offered[n.id] > 0) {
+      weightedLatency += latency * Math.max(throughput, 1);
+    }
     totalCost += cost;
 
     if (!bottleneck || load > bottleneck.load) {
@@ -231,18 +336,25 @@ export function simulate(nodes: SimNode[], edges: SimEdge[], trafficRps: number)
     }
   });
 
-  const avgLatency = totalThroughput > 0 ? weightedLatency / totalThroughput : 0;
-  const errorRate = trafficRps > 0 ? Math.min(totalErrors / trafficRps, 1) : 0;
+  const activeMetrics = Object.values(perNode).filter((metrics) => metrics.incoming > 0);
+  const errorRate = activeMetrics.length
+    ? Math.max(...activeMetrics.map((metrics) => metrics.errorRate))
+    : 0;
+  const throughput = trafficRps > 0 ? Math.min(trafficRps * (1 - errorRate), trafficRps) : 0;
+  const avgLatency = activeMetrics.length
+    ? weightedLatency /
+      activeMetrics.reduce((total, metrics) => total + Math.max(metrics.throughput, 1), 0)
+    : 0;
 
   return {
     perNode,
     totals: {
       avgLatency,
       errorRate,
-      throughput: totalThroughput,
+      throughput,
       cost: totalCost,
       bottleneck:
-        bottleneck && bottleneck.load >= 0.75
+        bottleneck && bottleneck.load >= 0.7
           ? { id: bottleneck.id, name: bottleneck.name }
           : undefined,
     },

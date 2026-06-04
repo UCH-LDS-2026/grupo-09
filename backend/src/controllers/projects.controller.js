@@ -12,7 +12,10 @@ export const projectsController = {
 
   async getById(request, response, next) {
     try {
-      const project = await projectsService.getProject(Number(request.params.id));
+      const project = await projectsService.getProject(
+        Number(request.params.id),
+        request.query.userEmail,
+      );
       response.status(200).json({ project });
     } catch (error) {
       next(error);
@@ -35,6 +38,15 @@ export const projectsController = {
         id: Number(request.params.id),
       });
       response.status(200).json({ project });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async delete(request, response, next) {
+    try {
+      await projectsService.deleteProject(Number(request.params.id), request.query.userEmail);
+      response.status(200).json({ deleted: true });
     } catch (error) {
       next(error);
     }

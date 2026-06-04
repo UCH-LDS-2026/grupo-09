@@ -3,6 +3,7 @@ import {
   KIND_META,
   makeNode,
   simulate,
+  validateConnection,
   type NodeKind,
   type SimEdge,
   type SimNode,
@@ -16,7 +17,6 @@ import { Badge } from "@/components/ui/badge";
 import {
   Play,
   Square,
-  RotateCcw,
   Save,
   Activity,
   AlertTriangle,
@@ -28,6 +28,10 @@ import {
   ChevronRight,
   LogOut,
   Trash2,
+  Copy,
+  FilePlus2,
+  FolderX,
+  Link2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AuthUser } from "@/models/auth";
@@ -103,6 +107,7 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
   const [running, setRunning] = useState(true);
   const [projectId, setProjectId] = useState<number | null>(null);
   const [projectName, setProjectName] = useState("plataforma-checkout.v1");
+  const [connectingFromId, setConnectingFromId] = useState<string | null>(null);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [isLoadingProjects, setIsLoadingProjects] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -176,6 +181,19 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
   // ---------- Drag nodes on canvas ----------
   const onNodeMouseDown = (e: React.MouseEvent, n: SimNode) => {
     setSelectedId(n.id);
+
+    if (connectingFromId) {
+      e.preventDefault();
+      if (connectingFromId === n.id) {
+        setConnectingFromId(null);
+        setPersistenceMessage("Conexión cancelada.");
+        return;
+      }
+
+      connectNodes(connectingFromId, n.id);
+      return;
+    }
+
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
     draggingRef.current = {
@@ -200,6 +218,23 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
     e.dataTransfer.setData("application/x-node-kind", kind);
     e.dataTransfer.effectAllowed = "copy";
   };
+
+  const addNodeToCanvas = (kind: NodeKind, position?: { x: number; y: number }) => {
+    const idx = nodes.filter((n) => n.kind === kind).length + 1;
+    const fallbackOffset = Math.min(idx - 1, 5) * 28;
+    const node = {
+      ...makeNode(
+        kind,
+        position?.x ?? 96 + fallbackOffset,
+        position?.y ?? 120 + fallbackOffset,
+        idx,
+      ),
+    };
+
+    setNodes((prev) => [...prev, node]);
+    setSelectedId(node.id);
+  };
+
   const onCanvasDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const kind = e.dataTransfer.getData("application/x-node-kind") as NodeKind;
@@ -208,10 +243,7 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
     if (!rect) return;
     const x = e.clientX - rect.left - NODE_W / 2;
     const y = e.clientY - rect.top - NODE_H / 2;
-    const idx = nodes.filter((n) => n.kind === kind).length + 1;
-    const node = { ...makeNode(kind, x, y, idx) };
-    setNodes((prev) => [...prev, node]);
-    setSelectedId(node.id);
+    addNodeToCanvas(kind, { x, y });
   };
 
   const updateSelected = (patch: Partial<SimNode>) => {
@@ -219,12 +251,47 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
     setNodes((prev) => prev.map((n) => (n.id === selected.id ? { ...n, ...patch } : n)));
   };
 
+  const connectNodes = (fromId: string, toId: string) => {
+    const fromNode = nodes.find((node) => node.id === fromId);
+    const toNode = nodes.find((node) => node.id === toId);
+
+    if (!fromNode || !toNode || fromId === toId) {
+      setConnectingFromId(null);
+      return;
+    }
+
+    const validation = validateConnection(fromNode, toNode, edges);
+    if (!validation.valid) {
+      setConnectingFromId(null);
+      setPersistenceError(validation.message);
+      return;
+    }
+
+    const edge: SimEdge = {
+      id: `e_${fromId}_${toId}_${Date.now().toString(36)}`,
+      from: fromId,
+      to: toId,
+      async: validation.isAsync,
+    };
+
+    setEdges((prev) => [...prev, edge]);
+    setSelectedId(toId);
+    setConnectingFromId(null);
+    setPersistenceMessage(`${fromNode.name} conectado con ${toNode.name}.`);
+    setPersistenceError(null);
+  };
+
   const loadProject = async (id: number) => {
     setPersistenceError(null);
     setPersistenceMessage(null);
 
     try {
-      const project = await projectService.get(id);
+      if (!user?.email) {
+        setPersistenceError("Iniciá sesión para cargar proyectos.");
+        return;
+      }
+
+      const project = await projectService.get(id, user.email);
       setProjectId(project.id);
       setProjectName(project.name);
       setTraffic(project.incomingTrafficRps);
@@ -232,12 +299,27 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
       setNodes(project.nodes);
       setEdges(project.edges);
       setSelectedId(project.nodes[0]?.id ?? null);
+      setConnectingFromId(null);
       setPersistenceMessage("Proyecto cargado.");
     } catch (error) {
       setPersistenceError(
         error instanceof Error ? error.message : "No se pudo cargar el proyecto.",
       );
     }
+  };
+
+  const startNewProject = () => {
+    setProjectId(null);
+    setProjectName("nuevo-proyecto");
+    setNodes([]);
+    setEdges([]);
+    setTraffic(600);
+    setRunning(true);
+    setSelectedId(null);
+    setConnectingFromId(null);
+    setPersistenceMessage("Nuevo proyecto listo.");
+    setPersistenceError(null);
+    draggingRef.current = null;
   };
 
   const saveProject = async () => {
@@ -251,10 +333,22 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
     setPersistenceMessage(null);
 
     try {
+      const normalizedProjectName = projectName.trim();
+
+      if (!normalizedProjectName) {
+        setPersistenceError("Poné un nombre para guardar el proyecto.");
+        return;
+      }
+
+      if (!nodes.length) {
+        setPersistenceError("Agregá al menos un componente antes de guardar.");
+        return;
+      }
+
       const project = await projectService.save({
         id: projectId,
         user,
-        name: projectName,
+        name: normalizedProjectName,
         traffic,
         running,
         nodes,
@@ -274,6 +368,51 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
     }
   };
 
+  const deleteCurrentProject = async () => {
+    if (!user?.email || !projectId) return;
+
+    setIsSaving(true);
+    setPersistenceError(null);
+    setPersistenceMessage(null);
+
+    try {
+      await projectService.remove(projectId, user.email);
+      setProjectId(null);
+      setProjectName("nuevo-proyecto");
+      setNodes([]);
+      setEdges([]);
+      setSelectedId(null);
+      setConnectingFromId(null);
+      setRunning(false);
+      setPersistenceMessage("Proyecto eliminado.");
+      await refreshProjects();
+    } catch (error) {
+      setPersistenceError(
+        error instanceof Error ? error.message : "No se pudo eliminar el proyecto.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const duplicateSelected = () => {
+    if (!selected) return;
+
+    const duplicatedNode: SimNode = {
+      ...selected,
+      id: `${selected.kind}_${Math.random().toString(36).slice(2, 8)}`,
+      name: `${selected.name} copia`,
+      x: selected.x + 32,
+      y: selected.y + 32,
+    };
+
+    setNodes((prev) => [...prev, duplicatedNode]);
+    setSelectedId(duplicatedNode.id);
+    setConnectingFromId(null);
+    setPersistenceMessage("Componente duplicado.");
+    setPersistenceError(null);
+  };
+
   const deleteSelected = () => {
     if (!selected) return;
     const selectedNodeId = selected.id;
@@ -281,63 +420,38 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
     setNodes((prev) => prev.filter((n) => n.id !== selectedNodeId));
     setEdges((prev) => prev.filter((e) => e.from !== selectedNodeId && e.to !== selectedNodeId));
     setSelectedId(null);
+    setConnectingFromId((value) => (value === selectedNodeId ? null : value));
     draggingRef.current = null;
   };
 
-  const reset = () => {
-    setProjectId(null);
-    setProjectName("plataforma-checkout.v1");
-    setNodes(initialNodes);
-    setEdges(initialEdges);
-    setTraffic(600);
-    setRunning(true);
-    setSelectedId("n_app");
-    setPersistenceMessage(null);
-    setPersistenceError(null);
-  };
-
-  const bottleneck = result.totals.bottleneck;
-  const bottleneckMetrics = bottleneck ? result.perNode[bottleneck.id] : undefined;
-  const bottleneckNode = bottleneck ? nodes.find((n) => n.id === bottleneck.id) : undefined;
-  const recommendedInstances =
-    bottleneckNode && bottleneckMetrics
-      ? Math.max(
-          bottleneckNode.instances + 1,
-          Math.ceil(bottleneckNode.instances * Math.max(bottleneckMetrics.load, 1)),
-        )
-      : 0;
-  const extraCost = bottleneckNode
-    ? (recommendedInstances - bottleneckNode.instances) * bottleneckNode.costPerInstance
-    : 0;
-
   return (
-    <div className="flex h-screen flex-col bg-background text-foreground">
+    <div className="flex min-h-screen flex-col bg-background text-foreground lg:h-screen">
       {/* ---------- Barra superior ---------- */}
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-border/60 bg-panel/60 px-4 backdrop-blur">
-        <div className="flex items-center gap-3">
+      <header className="flex shrink-0 flex-col gap-3 border-b border-border/60 bg-panel/75 px-3 py-3 backdrop-blur lg:h-14 lg:flex-row lg:items-center lg:justify-between lg:px-4 lg:py-0">
+        <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[color:var(--neon-cyan)]/15 ring-1 ring-[color:var(--neon-cyan)]/40">
             <Activity className="h-4 w-4 text-[color:var(--neon-cyan)]" />
           </div>
-          <div>
-            <div className="text-sm font-semibold tracking-tight">
+          <div className="min-w-0">
+            <div className="truncate text-sm font-semibold tracking-tight">
               Simulador de arquitectura distribuida
             </div>
-            <div className="mt-0.5 flex items-center gap-2 font-mono text-[11px] text-muted-foreground">
-              <span>proyecto /</span>
+            <div className="mt-1 flex min-w-0 items-center gap-2 font-mono text-[11px] text-muted-foreground sm:mt-0.5">
+              <span className="shrink-0">proyecto /</span>
               <Input
                 value={projectName}
                 onChange={(event) => setProjectName(event.target.value)}
-                className="h-6 w-56 border-border/50 bg-card/50 px-2 font-mono text-[11px]"
+                className="h-7 min-w-0 flex-1 border-border/50 bg-card/50 px-2 font-mono text-[11px] sm:w-56 sm:flex-none"
               />
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2 overflow-x-auto pb-1 lg:overflow-visible lg:pb-0">
           {(persistenceMessage || persistenceError) && (
             <span
               className={cn(
-                "hidden max-w-44 truncate font-mono text-[11px] xl:inline",
+                "max-w-44 shrink-0 truncate font-mono text-[11px]",
                 persistenceError
                   ? "text-[color:var(--status-saturated)]"
                   : "text-[color:var(--neon-cyan)]",
@@ -354,7 +468,7 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
               if (nextProjectId) void loadProject(nextProjectId);
             }}
             disabled={isLoadingProjects || !projects.length}
-            className="hidden h-8 max-w-48 rounded-md border border-border/60 bg-card/70 px-2 font-mono text-[11px] text-foreground outline-none transition hover:border-[color:var(--neon-cyan)]/50 disabled:cursor-not-allowed disabled:opacity-50 lg:block"
+            className="h-8 max-w-48 shrink-0 rounded-md border border-border/60 bg-card/70 px-2 font-mono text-[11px] text-foreground outline-none transition hover:border-[color:var(--neon-cyan)]/50 disabled:cursor-not-allowed disabled:opacity-50"
             title="Cargar proyecto guardado"
           >
             <option value="">Proyectos guardados</option>
@@ -364,44 +478,25 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
               </option>
             ))}
           </select>
-          <div className="mr-2 hidden items-center gap-4 md:flex">
-            <MiniStat
-              icon={Zap}
-              label="Tráfico"
-              value={`${Math.round(traffic)} req/s`}
-              accent="cyan"
-            />
-            <MiniStat
-              icon={CircleDollarSign}
-              label="Costo est. / mes"
-              value={`$${result.totals.cost.toFixed(0)}`}
-              accent="amber"
-            />
-          </div>
+          <Button size="sm" variant="ghost" onClick={startNewProject} className="shrink-0">
+            <FilePlus2 className="mr-1.5 h-3.5 w-3.5" /> Nuevo
+          </Button>
           <Button
             size="sm"
-            onClick={() => setRunning(true)}
-            className="bg-[color:var(--neon-cyan)]/15 text-[color:var(--neon-cyan)] ring-1 ring-[color:var(--neon-cyan)]/50 hover:bg-[color:var(--neon-cyan)]/25"
+            onClick={saveProject}
+            disabled={isSaving}
+            className="shrink-0 bg-[color:var(--neon-cyan)]/15 text-[color:var(--neon-cyan)] ring-1 ring-[color:var(--neon-cyan)]/50 hover:bg-[color:var(--neon-cyan)]/25"
           >
-            <Play className="mr-1.5 h-3.5 w-3.5" /> Ejecutar
-          </Button>
-          <Button size="sm" variant="secondary" onClick={() => setRunning(false)}>
-            <Square className="mr-1.5 h-3.5 w-3.5" /> Detener
-          </Button>
-          <Button size="sm" variant="ghost" onClick={reset}>
-            <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Reiniciar
+            <Save className="mr-1.5 h-3.5 w-3.5" /> {isSaving ? "Guardando..." : "Guardar"}
           </Button>
           <Button
             size="sm"
             variant="ghost"
-            onClick={deleteSelected}
-            disabled={!selected}
-            className="text-[color:var(--status-saturated)] hover:bg-[color:var(--status-saturated)]/10 hover:text-[color:var(--status-saturated)]"
+            onClick={deleteCurrentProject}
+            disabled={!projectId || isSaving}
+            className="shrink-0 text-[color:var(--status-saturated)] hover:bg-[color:var(--status-saturated)]/10 hover:text-[color:var(--status-saturated)]"
           >
-            <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Eliminar
-          </Button>
-          <Button size="sm" variant="ghost" onClick={saveProject} disabled={isSaving}>
-            <Save className="mr-1.5 h-3.5 w-3.5" /> {isSaving ? "Guardando..." : "Guardar"}
+            <FolderX className="mr-1.5 h-3.5 w-3.5" /> Borrar proyecto
           </Button>
           {user && (
             <div className="ml-2 hidden items-center gap-2 border-l border-border/60 pl-3 md:flex">
@@ -420,13 +515,13 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
       </header>
 
       {/* ---------- Layout principal ---------- */}
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         {/* Panel lateral */}
         {leftOpen && (
           <>
             <aside
               style={{ width: leftWidth }}
-              className="relative flex shrink-0 flex-col gap-4 overflow-y-auto border-r border-border/60 bg-panel/50 p-3"
+              className="relative hidden shrink-0 flex-col gap-4 overflow-y-auto border-r border-border/60 bg-panel/50 p-3 lg:flex"
             >
               <div>
                 <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
@@ -467,6 +562,30 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
                   </div>
                 </div>
               ))}
+
+              <ConnectionsPanel
+                nodes={nodes}
+                edges={edges}
+                selected={selected}
+                connectingFromId={connectingFromId}
+                onStartConnection={() => {
+                  if (!selected) return;
+                  setConnectingFromId(selected.id);
+                  setPersistenceMessage(
+                    `Elegí el componente destino para conectar ${selected.name}.`,
+                  );
+                  setPersistenceError(null);
+                }}
+                onCancelConnection={() => {
+                  setConnectingFromId(null);
+                  setPersistenceMessage("Conexión cancelada.");
+                }}
+                onDeleteConnection={(edgeId) => {
+                  setEdges((prev) => prev.filter((edge) => edge.id !== edgeId));
+                  setPersistenceMessage("Conexión eliminada.");
+                  setPersistenceError(null);
+                }}
+              />
             </aside>
             {/* Control de tamaño izquierdo */}
             <ResizeHandle onMouseDown={startResize("left")} />
@@ -474,7 +593,27 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
         )}
 
         {/* Lienzo + métricas inferiores */}
-        <main className="relative flex min-w-0 flex-1 flex-col">
+        <main className="relative flex min-h-[680px] min-w-0 flex-1 flex-col lg:min-h-0">
+          <div className="border-b border-border/60 bg-panel/45 p-2 lg:hidden">
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {CATEGORIES.flatMap((cat) => cat.kinds).map((kind) => {
+                const meta = KIND_META[kind];
+                const Icon = NODE_ICON[kind];
+                return (
+                  <button
+                    key={kind}
+                    type="button"
+                    onClick={() => addNodeToCanvas(kind)}
+                    className="flex h-10 shrink-0 items-center gap-2 rounded-md border border-border/60 bg-card/70 px-3 text-xs transition hover:border-[color:var(--neon-cyan)]/50 hover:bg-card"
+                  >
+                    <Icon className="h-3.5 w-3.5" style={{ color: meta.color }} />
+                    <span className="max-w-28 truncate">{meta.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div
             ref={canvasRef}
             onMouseMove={onCanvasMouseMove}
@@ -485,7 +624,7 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
               e.dataTransfer.dropEffect = "copy";
             }}
             onDrop={onCanvasDrop}
-            className="canvas-grid relative flex-1 overflow-hidden"
+            className="canvas-grid relative min-h-[520px] flex-1 overflow-hidden lg:min-h-0"
           >
             {/* Conexiones SVG */}
             <svg className="pointer-events-none absolute inset-0 h-full w-full">
@@ -550,6 +689,21 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
               })}
             </svg>
 
+            {!nodes.length && (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
+                <div className="max-w-sm rounded-lg border border-border/60 bg-panel/80 p-5 text-center shadow-[var(--shadow-glow-cyan)] backdrop-blur">
+                  <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-md bg-[color:var(--neon-cyan)]/15 ring-1 ring-[color:var(--neon-cyan)]/45">
+                    <Plus className="h-5 w-5 text-[color:var(--neon-cyan)]" />
+                  </div>
+                  <div className="text-sm font-semibold">Canvas listo para construir</div>
+                  <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                    Agregá componentes desde la biblioteca y guardá el proyecto cuando tengas una
+                    arquitectura base.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Nodos */}
             {nodes.map((n) => {
               const m = result.perNode[n.id];
@@ -558,6 +712,7 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
               const meta = KIND_META[n.kind];
               const Icon = NODE_ICON[n.kind];
               const isSelected = n.id === selectedId;
+              const isConnectingSource = n.id === connectingFromId;
               const showAlert = status === "saturated" || status === "failed";
               return (
                 <div
@@ -570,6 +725,8 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
                     styles.glow,
                     isSelected &&
                       "outline outline-2 outline-offset-2 outline-[color:var(--neon-cyan)]/70",
+                    isConnectingSource &&
+                      "outline outline-2 outline-offset-4 outline-[color:var(--neon-amber)]",
                   )}
                   style={{ left: n.x, top: n.y, width: NODE_W, height: NODE_H }}
                 >
@@ -603,7 +760,8 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
                         {n.name}
                       </div>
                       <div className="font-mono text-[10px] text-muted-foreground">
-                        {n.instances}× · {n.capacity} r/s
+                        {n.instances}× · {n.capacity} r/s · carga{" "}
+                        {((m?.load ?? 0) * 100).toFixed(0)}%
                       </div>
                     </div>
                   </div>
@@ -631,14 +789,35 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
             })}
 
             {/* Control de tráfico */}
-            <div className="absolute left-4 top-4 w-72 rounded-lg border border-border/60 bg-panel/80 p-3 backdrop-blur">
-              <div className="mb-2 flex items-center justify-between">
-                <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                  Tráfico entrante
-                </Label>
-                <span className="font-mono text-xs text-[color:var(--neon-cyan)]">
-                  {traffic} req/s
-                </span>
+            <div className="absolute left-3 right-3 top-3 rounded-lg border border-border/60 bg-panel/80 p-3 backdrop-blur sm:left-4 sm:right-auto sm:top-4 sm:w-72">
+              <div className="mb-2 flex items-start justify-between gap-3">
+                <div>
+                  <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                    Tráfico entrante
+                  </Label>
+                  <div className="mt-1 font-mono text-xs text-[color:var(--neon-cyan)]">
+                    {traffic} req/s
+                  </div>
+                </div>
+                <div className="flex gap-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => setRunning(true)}
+                    className="h-7 px-2 bg-[color:var(--neon-cyan)]/15 text-[color:var(--neon-cyan)] ring-1 ring-[color:var(--neon-cyan)]/50 hover:bg-[color:var(--neon-cyan)]/25"
+                  >
+                    <Play className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setRunning(false)}
+                    className="h-7 px-2"
+                  >
+                    <Square className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
               </div>
               <Slider
                 value={[traffic]}
@@ -665,7 +844,7 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
               accent={result.totals.avgLatency > 200 ? "warn" : "cyan"}
             />
             <Metric
-              label="Rendimiento"
+              label="Salida real"
               value={`${result.totals.throughput.toFixed(0)} r/s`}
               icon={TrendingUp}
               accent="violet"
@@ -683,6 +862,22 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
               accent="amber"
             />
           </div>
+
+          <section className="border-t border-border/60 bg-panel/60 p-3 lg:hidden">
+            {selected ? (
+              <PropertiesPanel
+                node={selected}
+                onChange={updateSelected}
+                onDelete={deleteSelected}
+                onDuplicate={duplicateSelected}
+                metrics={result.perNode[selected.id]}
+              />
+            ) : (
+              <div className="rounded-lg border border-border/60 bg-card/60 p-3 text-sm text-muted-foreground">
+                Seleccioná un componente del canvas para editarlo.
+              </div>
+            )}
+          </section>
         </main>
 
         {/* Panel derecho + control */}
@@ -691,13 +886,14 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
             <ResizeHandle onMouseDown={startResize("right")} />
             <aside
               style={{ width: rightWidth }}
-              className="relative flex shrink-0 flex-col gap-4 overflow-y-auto border-l border-border/60 bg-panel/50 p-4"
+              className="relative hidden shrink-0 flex-col gap-4 overflow-y-auto border-l border-border/60 bg-panel/50 p-4 lg:flex"
             >
               {selected ? (
                 <PropertiesPanel
                   node={selected}
                   onChange={updateSelected}
                   onDelete={deleteSelected}
+                  onDuplicate={duplicateSelected}
                   metrics={result.perNode[selected.id]}
                 />
               ) : (
@@ -705,98 +901,6 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
                   Seleccioná un componente para configurarlo.
                 </div>
               )}
-
-              {/* Alertas / recomendaciones */}
-              {bottleneck && bottleneckNode && bottleneckMetrics ? (
-                <div className="rounded-lg border border-[color:var(--status-saturated)]/50 bg-[color:var(--status-saturated)]/5 p-3">
-                  <div className="mb-1 flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4 text-[color:var(--status-saturated)]" />
-                    <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--status-saturated)]">
-                      Cuello de botella: {bottleneck.name}
-                    </div>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Carga al{" "}
-                    <span className="font-mono text-foreground">
-                      {(bottleneckMetrics.load * 100).toFixed(0)}%
-                    </span>{" "}
-                    · latencia{" "}
-                    <span className="font-mono text-foreground">
-                      {bottleneckMetrics.latency.toFixed(0)}ms
-                    </span>
-                    .
-                  </p>
-                  {recommendedInstances > bottleneckNode.instances && (
-                    <div className="mt-2 rounded-md bg-card/70 p-2 text-xs">
-                      <div className="text-foreground">
-                        Recomendado: escalar instancias{" "}
-                        <span className="font-mono">
-                          {bottleneckNode.instances} → {recommendedInstances}
-                        </span>
-                      </div>
-                      <div className="font-mono text-[11px] text-[color:var(--neon-amber)]">
-                        Costo extra estimado: +${extraCost}/mes
-                      </div>
-                      <Button
-                        size="sm"
-                        className="mt-2 h-7 w-full bg-[color:var(--neon-cyan)]/15 text-[color:var(--neon-cyan)] ring-1 ring-[color:var(--neon-cyan)]/50 hover:bg-[color:var(--neon-cyan)]/25"
-                        onClick={() =>
-                          setNodes((prev) =>
-                            prev.map((n) =>
-                              n.id === bottleneckNode.id
-                                ? { ...n, instances: recommendedInstances }
-                                : n,
-                            ),
-                          )
-                        }
-                      >
-                        Aplicar recomendación
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="rounded-lg border border-border/60 bg-card/60 p-3">
-                  <div className="mb-1 flex items-center gap-2">
-                    <Activity className="h-4 w-4 text-[color:var(--neon-cyan)]" />
-                    <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--neon-cyan)]">
-                      Sistema estable
-                    </div>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    No se detectaron cuellos de botella. Subí el tráfico para probar estrés.
-                  </p>
-                </div>
-              )}
-
-              {/* Costo por componente */}
-              <div>
-                <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                  Costo por componente
-                </div>
-                <div className="space-y-1.5">
-                  {nodes.map((n) => {
-                    const m = result.perNode[n.id];
-                    return (
-                      <div
-                        key={n.id}
-                        className="flex items-center justify-between rounded-md bg-card/60 px-2.5 py-1.5 text-xs"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={cn(
-                              "h-1.5 w-1.5 rounded-full",
-                              STATUS_STYLES[m?.status ?? "healthy"].dot,
-                            )}
-                          />
-                          <span className="truncate">{n.name}</span>
-                        </div>
-                        <span className="font-mono text-muted-foreground">${m?.cost ?? 0}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
             </aside>
           </>
         )}
@@ -807,7 +911,7 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
         type="button"
         onClick={() => setLeftOpen((v) => !v)}
         title={leftOpen ? "Ocultar biblioteca" : "Mostrar biblioteca"}
-        className="fixed left-2 top-1/2 z-30 flex h-9 w-6 -translate-y-1/2 items-center justify-center rounded-r-md border border-l-0 border-border/60 bg-panel/90 text-muted-foreground shadow-lg backdrop-blur transition hover:bg-card hover:text-[color:var(--neon-cyan)]"
+        className="fixed left-2 top-1/2 z-30 hidden h-9 w-6 -translate-y-1/2 items-center justify-center rounded-r-md border border-l-0 border-border/60 bg-panel/90 text-muted-foreground shadow-lg backdrop-blur transition hover:bg-card hover:text-[color:var(--neon-cyan)] lg:flex"
       >
         {leftOpen ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
       </button>
@@ -815,7 +919,7 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
         type="button"
         onClick={() => setRightOpen((v) => !v)}
         title={rightOpen ? "Ocultar propiedades" : "Mostrar propiedades"}
-        className="fixed right-2 top-1/2 z-30 flex h-9 w-6 -translate-y-1/2 items-center justify-center rounded-l-md border border-r-0 border-border/60 bg-panel/90 text-muted-foreground shadow-lg backdrop-blur transition hover:bg-card hover:text-[color:var(--neon-cyan)]"
+        className="fixed right-2 top-1/2 z-30 hidden h-9 w-6 -translate-y-1/2 items-center justify-center rounded-l-md border border-r-0 border-border/60 bg-panel/90 text-muted-foreground shadow-lg backdrop-blur transition hover:bg-card hover:text-[color:var(--neon-cyan)] lg:flex"
       >
         {rightOpen ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
       </button>
@@ -824,38 +928,6 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
 }
 
 // ---------- Subcomponents ----------
-
-function MiniStat({
-  icon: Icon,
-  label,
-  value,
-  accent,
-}: {
-  icon: typeof Zap;
-  label: string;
-  value: string;
-  accent: "cyan" | "amber" | "violet";
-}) {
-  const color =
-    accent === "cyan"
-      ? "var(--neon-cyan)"
-      : accent === "amber"
-        ? "var(--neon-amber)"
-        : "var(--neon-violet)";
-  return (
-    <div className="flex items-center gap-2">
-      <Icon className="h-3.5 w-3.5" style={{ color }} />
-      <div className="flex items-baseline gap-1.5">
-        <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-          {label}
-        </span>
-        <span className="font-mono text-xs" style={{ color }}>
-          {value}
-        </span>
-      </div>
-    </div>
-  );
-}
 
 function Metric({
   label,
@@ -891,19 +963,110 @@ function Metric({
   );
 }
 
+function ConnectionsPanel({
+  nodes,
+  edges,
+  selected,
+  connectingFromId,
+  onStartConnection,
+  onCancelConnection,
+  onDeleteConnection,
+}: {
+  nodes: SimNode[];
+  edges: SimEdge[];
+  selected: SimNode | null;
+  connectingFromId: string | null;
+  onStartConnection: () => void;
+  onCancelConnection: () => void;
+  onDeleteConnection: (edgeId: string) => void;
+}) {
+  const nodeNames = new Map(nodes.map((node) => [node.id, node.name]));
+  const connectingNodeName = connectingFromId ? nodeNames.get(connectingFromId) : null;
+
+  return (
+    <div className="mt-auto space-y-3 border-t border-border/60 pt-3">
+      <div>
+        <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+          Conexiones
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground/80">
+          {connectingNodeName
+            ? `Elegí destino para ${connectingNodeName}.`
+            : selected
+              ? `Origen: ${selected.name}`
+              : "Seleccioná un componente."}
+        </p>
+      </div>
+
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={!selected}
+          onClick={onStartConnection}
+          className={cn(
+            "flex-1 border-[color:var(--neon-cyan)]/45 bg-[color:var(--neon-cyan)]/5 text-[color:var(--neon-cyan)] hover:bg-[color:var(--neon-cyan)]/10 hover:text-[color:var(--neon-cyan)]",
+            connectingFromId &&
+              "border-[color:var(--neon-amber)]/65 bg-[color:var(--neon-amber)]/10 text-[color:var(--neon-amber)] hover:text-[color:var(--neon-amber)]",
+          )}
+        >
+          <Link2 className="h-4 w-4" />
+          {connectingFromId ? "Conectando" : "Conectar"}
+        </Button>
+        {connectingFromId && (
+          <Button type="button" size="sm" variant="ghost" onClick={onCancelConnection}>
+            Cancelar
+          </Button>
+        )}
+      </div>
+
+      <div className="max-h-40 space-y-1.5 overflow-y-auto">
+        {edges.length ? (
+          edges.map((edge) => (
+            <div
+              key={edge.id}
+              className="flex items-center justify-between gap-2 rounded-md bg-card/60 px-2.5 py-2 text-xs"
+            >
+              <span className="min-w-0 flex-1 truncate">
+                {nodeNames.get(edge.from) ?? edge.from} → {nodeNames.get(edge.to) ?? edge.to}
+              </span>
+              <button
+                type="button"
+                onClick={() => onDeleteConnection(edge.id)}
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[color:var(--status-saturated)] transition hover:bg-[color:var(--status-saturated)]/10"
+                title="Eliminar conexión"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))
+        ) : (
+          <div className="rounded-md bg-card/50 p-2 text-xs text-muted-foreground">
+            Todavía no hay conexiones.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function PropertiesPanel({
   node,
   onChange,
   onDelete,
+  onDuplicate,
   metrics,
 }: {
   node: SimNode;
   onChange: (patch: Partial<SimNode>) => void;
   onDelete: () => void;
+  onDuplicate: () => void;
   metrics?: {
     load: number;
     latency: number;
     throughput: number;
+    errorRate: number;
     status: "healthy" | "warning" | "saturated" | "failed";
   };
 }) {
@@ -940,15 +1103,21 @@ function PropertiesPanel({
         </Badge>
       </div>
 
-      <Button
-        type="button"
-        variant="outline"
-        className="w-full border-[color:var(--status-saturated)]/45 bg-[color:var(--status-saturated)]/5 text-[color:var(--status-saturated)] hover:bg-[color:var(--status-saturated)]/10 hover:text-[color:var(--status-saturated)]"
-        onClick={onDelete}
-      >
-        <Trash2 className="h-4 w-4" />
-        Eliminar componente
-      </Button>
+      <div className="grid grid-cols-2 gap-2">
+        <Button type="button" variant="outline" onClick={onDuplicate}>
+          <Copy className="h-4 w-4" />
+          Duplicar
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="border-[color:var(--status-saturated)]/45 bg-[color:var(--status-saturated)]/5 text-[color:var(--status-saturated)] hover:bg-[color:var(--status-saturated)]/10 hover:text-[color:var(--status-saturated)]"
+          onClick={onDelete}
+        >
+          <Trash2 className="h-4 w-4" />
+          Eliminar
+        </Button>
+      </div>
 
       <div className="space-y-3">
         <Field label="Nombre">
@@ -980,23 +1149,6 @@ function PropertiesPanel({
           onChange={(v) => onChange({ baseLatency: v })}
           unit="ms"
         />
-        <SliderField
-          label="Tamaño de cola"
-          value={node.queueSize}
-          min={0}
-          max={2000}
-          step={10}
-          onChange={(v) => onChange({ queueSize: v })}
-        />
-        <SliderField
-          label="Tiempo de espera"
-          value={node.timeout}
-          min={100}
-          max={10000}
-          step={100}
-          onChange={(v) => onChange({ timeout: v })}
-          unit="ms"
-        />
         <Field label="Costo por instancia ($/mes)">
           <Input
             type="number"
@@ -1007,10 +1159,11 @@ function PropertiesPanel({
       </div>
 
       {metrics && (
-        <div className="grid grid-cols-3 gap-2 border-t border-border/60 pt-3">
+        <div className="grid grid-cols-2 gap-2 border-t border-border/60 pt-3">
           <MiniMetric label="Carga" value={`${(metrics.load * 100).toFixed(0)}%`} />
           <MiniMetric label="Latencia" value={`${metrics.latency.toFixed(0)}ms`} />
           <MiniMetric label="Salida" value={`${metrics.throughput.toFixed(0)}r/s`} />
+          <MiniMetric label="Error" value={`${(metrics.errorRate * 100).toFixed(1)}%`} />
         </div>
       )}
     </div>
@@ -1084,7 +1237,7 @@ function ResizeHandle({ onMouseDown }: { onMouseDown: (e: React.MouseEvent) => v
       onMouseDown={onMouseDown}
       role="separator"
       aria-orientation="vertical"
-      className="group relative z-10 w-1 shrink-0 cursor-col-resize bg-border/60 transition-colors hover:bg-[color:var(--neon-cyan)]/60"
+      className="group relative z-10 hidden w-1 shrink-0 cursor-col-resize bg-border/60 transition-colors hover:bg-[color:var(--neon-cyan)]/60 lg:block"
       title="Arrastrá para cambiar tamaño"
     >
       {/* Wider invisible hit area */}

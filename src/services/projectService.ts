@@ -54,8 +54,9 @@ export const projectService = {
     return data.projects;
   },
 
-  async get(id: number): Promise<SavedProject> {
-    const data = await requestJson<{ project: SavedProject }>(`/projects/${id}`);
+  async get(id: number, userEmail: string): Promise<SavedProject> {
+    const params = new URLSearchParams({ userEmail });
+    const data = await requestJson<{ project: SavedProject }>(`/projects/${id}?${params}`);
     return data.project;
   },
 
@@ -68,5 +69,12 @@ export const projectService = {
     });
 
     return data.project;
+  },
+
+  async remove(id: number, userEmail: string): Promise<void> {
+    const params = new URLSearchParams({ userEmail });
+    await requestJson<{ deleted: true }>(`/projects/${id}?${params}`, {
+      method: "DELETE",
+    });
   },
 };
