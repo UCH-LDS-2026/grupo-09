@@ -1,6 +1,6 @@
 # Demo para profesor
 
-Esta guía muestra los avances del MVP y propone pruebas simples para defender Fase 0, Fase 1 y Fase 2.
+Esta guía muestra los avances del MVP y propone pruebas simples para defender Fase 0, Fase 1, Fase 2 y Fase 3.
 
 ## Cómo levantar el sistema
 
@@ -26,10 +26,12 @@ Frontend esperado: `http://localhost:8080` o el siguiente puerto libre, por ejem
 ```bash
 curl http://localhost:3001/api/health
 curl http://localhost:3001/api/health/db
-curl -X POST http://localhost:3001/api/simulations/run
+curl -X POST http://localhost:3001/api/simulations/run \
+  -H "Content-Type: application/json" \
+  -d '{"traffic":600,"nodes":[{"id":"gw","kind":"api_gateway","name":"Gateway","instances":2,"capacity":800,"baseLatency":8,"queueSize":100,"timeout":2000,"costPerInstance":25},{"id":"app","kind":"app_service","name":"App","instances":2,"capacity":400,"baseLatency":35,"queueSize":100,"timeout":3000,"costPerInstance":40}],"edges":[{"id":"e1","from":"gw","to":"app"}]}'
 ```
 
-Ambos deben responder `status: ok`.
+Los health deben responder `status: ok`. La simulación debe devolver `result.perNode`, `result.totals` y `result.cycles`.
 
 ## Qué decir de cada fase
 
@@ -52,6 +54,8 @@ El panel derecho permite configurar cada componente:
 - Instancias.
 - Capacidad por instancia.
 - Latencia base.
+- Tamaño de cola.
+- Timeout.
 - Costo por instancia.
 
 También muestra métricas calculadas:
@@ -68,7 +72,7 @@ También muestra métricas calculadas:
 
 ### Fase 2 - Motor por ciclos
 
-La simulación corre en 6 ciclos discretos. El motor existe en frontend para respuesta inmediata y también en backend por el endpoint `POST /api/simulations/run`.
+La simulación corre en 6 ciclos discretos. El motor está centralizado en `shared/simulator-core.js`, el backend lo expone con `POST /api/simulations/run` y el frontend usa ese endpoint con fallback local.
 
 En cada ciclo:
 
@@ -113,6 +117,20 @@ Respuesta:
   }
 }
 ```
+
+### Fase 3 - Seguridad y validaciones backend
+
+El backend ya no depende de que el frontend se porte bien:
+
+- Valida nodos y conexiones desde API.
+- Bloquea tipos desconocidos.
+- Bloquea conexiones duplicadas.
+- Bloquea conexiones a nodos inexistentes.
+- Bloquea ciclos.
+- Valida ids de proyecto.
+- Usa headers mínimos de seguridad.
+- Usa rate limit simple para `/api`.
+- Frontend y backend comparten reglas y motor desde `shared/simulator-core.js`.
 
 ## Sistema simple para mostrar
 
@@ -216,7 +234,7 @@ Estos puntos son límites honestos del MVP:
 - La simulación tiene endpoint backend, pero todavía no guarda historial de corridas.
 - Todavía no hay jobs asincrónicos ni persistencia de métricas de corridas.
 - No hay tests automatizados completos todavía.
-- La validación backend está hecha a mano; en una fase futura conviene usar schemas reutilizables.
+- La validación está centralizada en un módulo compartido; en una fase futura podría migrarse a schemas formales como Zod/Joi.
 - Si MySQL no está levantado o no tiene `schema.sql` aplicado, `/api/health/db` falla.
 
 ## Frase corta para defender el avance

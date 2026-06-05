@@ -17,6 +17,8 @@ El MVP ya permite:
 - Ver métricas por componente.
 - Ver conclusión automática.
 - Guardar, listar, cargar, actualizar y borrar proyectos con backend y MySQL.
+- Ejecutar simulación desde backend mediante `POST /api/simulations/run`.
+- Compartir reglas de conexión y simulación entre frontend y backend.
 
 Componentes activos:
 
@@ -105,6 +107,8 @@ Alcance:
   - Instancias.
   - Capacidad por instancia.
   - Latencia base.
+  - Tamaño de cola.
+  - Timeout.
   - Costo por instancia.
   - Carga.
   - Salida procesada.
@@ -137,7 +141,8 @@ Resultado aplicado:
 
 - El panel separa configuración editable y resultado calculado.
 - Los valores numéricos se normalizan con mínimos seguros.
-- Se muestran capacidad total, costo mensual, entrada, carga, salida procesada, error, latencia y estado.
+- Se editan nombre, instancias, capacidad, latencia base, cola, timeout y costo por instancia.
+- Se muestran capacidad total, costo mensual, entrada, carga, salida procesada, cola, error, latencia y estado.
 
 ## Fase 2 - Motor de simulación por ciclos (`#6`)
 
@@ -169,7 +174,7 @@ Alcance:
 
 Entregables:
 
-- Motor separado dentro de `src/lib/simulator.ts` o archivo de dominio dedicado.
+- Motor centralizado en `shared/simulator-core.js`.
 - Endpoint backend para ejecutar simulación sin depender sólo del frontend.
 - Tipos claros para ciclo, nodo medido y resultado total.
 - Pruebas manuales y verificaciones técnicas del motor.

@@ -17,13 +17,14 @@
 - Endpoint backend de simulación.
 - Headers mínimos de seguridad.
 - Rate limit simple para `/api`.
+- Documentación de demo y review de uso del sistema.
 
 ## Qué falta
 
 ### Producto
 
 - Agregar tests automatizados.
-- Documentar demo final en README.
+- Pasar la demo final al README cuando se prepare la entrega.
 - Mejorar mensajes de error de backend en la UI.
 
 ### Frontend
@@ -49,7 +50,7 @@
 
 ## Seguridad
 
-Estado actual: suficiente para MVP local, no suficiente para producción.
+Estado actual: suficiente para MVP local y demo académica, no suficiente para producción.
 
 Riesgos actuales:
 
@@ -74,14 +75,13 @@ Para MVP está bien.
 
 Limitaciones:
 
-- Simulación corre en frontend.
-- No hay jobs ni historial persistido.
+- La simulación corre en backend y conserva fallback local en frontend.
+- No hay jobs asincrónicos ni historial persistido.
 - No hay paginación avanzada de proyectos.
 - No hay cacheo ni observabilidad.
 
 Mejoras futuras:
 
-- Endpoint de simulación backend.
 - Guardar corridas.
 - Paginación de proyectos.
 - Logs estructurados.

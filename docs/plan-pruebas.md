@@ -4,7 +4,9 @@ Este plan separa pruebas unitarias, pruebas de integración y pruebas manuales d
 
 ## Pruebas unitarias recomendadas
 
-### `src/lib/simulator.ts`
+### `shared/simulator-core.js`
+
+Estas pruebas cubren el núcleo compartido que usan frontend y backend. `src/lib/simulator.ts` sólo reexporta este módulo para la UI.
 
 - `canConnect` permite `api_gateway -> load_balancer`.
 - `canConnect` permite `api_gateway -> app_service`.
@@ -27,6 +29,11 @@ Este plan separa pruebas unitarias, pruebas de integración y pruebas manuales d
 - `simulate` calcula salida procesada como `min(trafico, capacidad)`.
 - `simulate` calcula error cuando el tráfico supera capacidad.
 - `simulate` detecta cuello de botella como mayor carga.
+- `normalizeProjectGraph` rechaza nodos duplicados.
+- `normalizeProjectGraph` rechaza conexiones a nodos inexistentes.
+- `normalizeProjectGraph` rechaza conexiones inválidas.
+- `normalizeProjectGraph` rechaza ciclos.
+- `normalizeSimulationPayload` normaliza tráfico negativo a cero.
 
 ### `systemConclusionLogic.ts`
 
@@ -60,6 +67,24 @@ Este plan separa pruebas unitarias, pruebas de integración y pruebas manuales d
 - No permite cargar proyecto con otro email.
 - No guarda proyecto sin nodos.
 - No guarda proyecto sin email de usuario.
+- No guarda conexión inválida aunque venga directo por API.
+- No guarda ciclos aunque venga directo por API.
+- `GET /api/projects/:id` con id no numérico devuelve `400`.
+
+### Simulaciones
+
+- `POST /api/simulations/run` ejecuta simulación por ciclos.
+- `POST /api/simulations/run` devuelve `perNode`, `totals` y `cycles`.
+- `POST /api/simulations/run` bloquea conexiones inválidas.
+- `POST /api/simulations/run` bloquea nodos con tipo desconocido.
+- `POST /api/simulations/run` bloquea ciclos.
+
+### Seguridad mínima
+
+- Las respuestas de API incluyen `X-Content-Type-Options`.
+- Las respuestas de API incluyen `X-Frame-Options`.
+- Las respuestas de API incluyen `Referrer-Policy`.
+- El rate limit devuelve `429` si se supera el límite.
 
 ## Pruebas integrales frontend-backend
 
@@ -74,6 +99,7 @@ Este plan separa pruebas unitarias, pruebas de integración y pruebas manuales d
 - Configurar App Service con 2 instancias y 550 req/s.
 - Configurar Database con 1 instancia y 600 req/s.
 - Ejecutar simulación.
+- Confirmar que el frontend recibe resultado desde `/api/simulations/run`.
 - Ver métricas coherentes.
 - Ver conclusión estable.
 - Guardar proyecto con nombre.
@@ -101,7 +127,8 @@ Este plan separa pruebas unitarias, pruebas de integración y pruebas manuales d
 
 ## Orden recomendado para implementar tests
 
-1. Unitarias de `src/lib/simulator.ts`.
+1. Unitarias de `shared/simulator-core.js`.
 2. Unitarias de `systemConclusionLogic.ts`.
 3. Integración de backend `/api/projects`.
-4. E2E del flujo principal en Playwright.
+4. Integración de backend `/api/simulations/run`.
+5. E2E del flujo principal en Playwright.

@@ -10,7 +10,7 @@
 
 Software Estrés es una aplicación web para diseñar, visualizar y simular arquitecturas distribuidas.
 
-El sistema permite que un usuario construya gráficamente un esquema de arquitectura usando componentes como Puerta de Enlace API, Balanceador de Carga, Servicio de Aplicación, Caché, Base de Datos y Cola de Mensajes. Luego puede ejecutar una simulación de tráfico para analizar el comportamiento del sistema bajo carga.
+El sistema permite que un usuario construya gráficamente un esquema de arquitectura usando componentes como Puerta de Enlace API, Balanceador de Carga, Servicio de Aplicación, Base de Datos y Cola de Mensajes. Luego puede ejecutar una simulación de tráfico por ciclos para analizar el comportamiento del sistema bajo carga.
 
 La aplicación muestra métricas como tráfico total, latencia promedio, rendimiento, tasa de error, costo mensual estimado y cuellos de botella. También permite configurar cada componente y recibir recomendaciones básicas de escalado.
 
@@ -22,34 +22,37 @@ Normalmente, probar este tipo de escenarios requiere infraestructura real, herra
 
 ## Estado actual del proyecto
 
-Actualmente el proyecto cuenta con una primera versión funcional del frontend.
+Actualmente el proyecto cuenta con un MVP funcional con frontend, backend, MySQL, persistencia de proyectos, simulación backend y validaciones mínimas de seguridad.
 
 Ya se implementó:
 
-- Pantalla de login básica y moderna.
-- Arquitectura frontend organizada con enfoque MVC.
+- Usuario demo para acceder al simulador sin autenticación real.
+- Arquitectura frontend organizada por vistas, controladores, componentes y servicios.
 - Simulador visual de arquitectura distribuida.
 - Biblioteca de componentes para arrastrar al lienzo.
 - Canvas central para ubicar componentes.
 - Panel derecho para configurar el componente seleccionado.
 - Opción para eliminar componentes agregados al diagrama.
-- Simulación de tráfico entrante.
+- Simulación de tráfico entrante por ciclos.
 - Cálculo visual de métricas generales.
 - Detección de componentes saturados o fallando.
 - Recomendaciones básicas de escalado.
 - Documentación inicial de arquitectura.
-- Backend inicial con Node.js, Express y endpoints de health.
+- Backend con Node.js, Express, endpoints de health, proyectos y simulación.
 - Conexión configurada para MySQL desde el backend.
-- API inicial para guardar, listar, cargar y actualizar proyectos.
+- API para guardar, listar, cargar, actualizar y borrar proyectos.
 - Persistencia de nodos y conexiones del diagrama en MySQL.
 - Botón Guardar conectado al backend.
 - Script SQL inicial para la base de datos.
+- Motor y reglas de simulación centralizados en `shared/simulator-core.js`.
+- Endpoint backend `POST /api/simulations/run`.
+- Headers mínimos de seguridad y rate limit simple para `/api`.
 
-Todavía falta conectar el frontend con la API, usar la base de datos en los flujos reales y agregar persistencia de proyectos.
+Todavía falta autenticación real, historial persistido de corridas, tests automatizados completos y preparación final de entrega.
 
 ## Funcionalidades principales
 
-- Iniciar sesión en el sistema.
+- Entrar con usuario demo.
 - Diseñar una arquitectura distribuida de forma visual.
 - Agregar componentes al esquema.
 - Eliminar componentes del esquema.
@@ -61,17 +64,18 @@ Todavía falta conectar el frontend con la API, usar la base de datos en los flu
 - Ver alertas de saturación o falla.
 - Recibir recomendaciones de escalado.
 - Consultar costo mensual estimado de la arquitectura.
+- Guardar, cargar, actualizar y borrar proyectos.
+- Ejecutar simulación desde backend con fallback local.
 
 ## Funcionalidades pendientes
 
 - Crear endpoints de autenticación.
 - Conectar el login con el backend.
-- Conectar los flujos reales del sistema con MySQL.
 - Persistir usuarios en base de datos.
 - Guardar historial de simulaciones.
 - Persistir métricas de cada corrida.
 - Implementar recomendaciones de escalado desde backend.
-- Agregar validaciones más completas.
+- Agregar tests automatizados y validaciones con schemas formales si el alcance crece.
 - Mejorar control de roles de usuario.
 - Agregar exportación del diagrama o resultados.
 - Preparar despliegue del sistema.
@@ -109,6 +113,7 @@ softwareestres-main/
 ├── src/          Frontend React + TypeScript
 ├── backend/      Backend Node.js
 ├── database/     Scripts y documentación de base de datos
+├── shared/       Reglas compartidas de simulación y validación
 ├── docs/         Documentación técnica
 └── dist/         Build generado
 
@@ -129,9 +134,9 @@ src/
 ├── models/       Modelos y tipos
 ├── components/   Componentes reutilizables
 ├── routes/       Rutas de la aplicación
-└── lib/          Lógica auxiliar y simulación
+└── lib/          Fachadas frontend y utilidades
 
-Actualmente el frontend es la parte más avanzada del proyecto. Ya permite iniciar sesión con credenciales demo y usar el simulador visual.
+Actualmente el frontend permite entrar con usuario demo, usar el simulador visual, configurar componentes, consumir simulación backend y persistir proyectos.
 
 ## Backend
 
@@ -158,13 +163,14 @@ backend/
 Estado actual del backend:
 
 - La estructura de carpetas ya fue creada.
-- El package.json del backend ya existe.
-- El archivo .env.example ya existe.
 - El servidor principal ya existe en `backend/src/server.js`.
 - La aplicación Express ya existe en `backend/src/app.js`.
 - Ya existen endpoints de health: `GET /health`, `GET /health/db` y `GET /api/health`.
 - La conexión a MySQL está configurada en `backend/src/config/database.js`.
-- Todavía faltan endpoints de autenticación, usuarios, proyectos, nodos, conexiones y simulaciones.
+- Ya existen endpoints de proyectos: `GET`, `POST`, `PUT` y `DELETE /api/projects`.
+- Ya existe endpoint de simulación: `POST /api/simulations/run`.
+- Ya existen validaciones backend de grafo, conexiones, ciclos e ids.
+- Todavía faltan autenticación real, historial de corridas y recomendaciones persistidas.
 
 ## Base de datos
 
@@ -624,6 +630,47 @@ Resultado de la revisión:
   - `POST /api/projects`: `201`
   - `GET /api/projects`: `200`
   - `GET /api/projects/:id`: `200`
+
+## Estado actualizado del MVP
+
+El proyecto quedó actualizado hasta Fase 3 del MVP:
+
+- **Fase 0:** estabilización del MVP, front-back-DB conectados.
+- **Fase 1:** panel derecho de configuración completo.
+- **Fase 2:** motor de simulación por ciclos.
+- **Fase 3:** validaciones backend, seguridad mínima y reglas centralizadas.
+
+El motor de simulación y las reglas de conexión viven en:
+
+```txt
+shared/simulator-core.js
+```
+
+El frontend lo usa mediante:
+
+```txt
+src/lib/simulator.ts
+src/services/simulationService.ts
+```
+
+El backend lo usa mediante:
+
+```txt
+backend/src/services/projects.service.js
+backend/src/services/simulations.service.js
+```
+
+Endpoint de simulación:
+
+```txt
+POST /api/simulations/run
+```
+
+Pendiente principal:
+
+- Fase 4: guardar corridas de simulación, métricas y recomendaciones.
+- Fase 5: autenticación real.
+- Fase 6: README final de entrega, checklist y demo.
 
 ## Nota importante
 
