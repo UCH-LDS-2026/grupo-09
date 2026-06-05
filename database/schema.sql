@@ -178,7 +178,7 @@ CREATE TABLE IF NOT EXISTS simulation_node_metrics (
   throughput_rps DECIMAL(12,2) NOT NULL,
   latency_ms DECIMAL(12,2) NOT NULL,
   error_rate DECIMAL(8,6) NOT NULL,
-  status ENUM('healthy', 'warning', 'saturated', 'failed') NOT NULL,
+  status ENUM('healthy', 'warning', 'high_load', 'saturated', 'error') NOT NULL,
   monthly_cost DECIMAL(12,2) NOT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
@@ -254,6 +254,10 @@ ON DUPLICATE KEY UPDATE
   default_timeout_ms = VALUES(default_timeout_ms),
   default_cost_per_instance = VALUES(default_cost_per_instance),
   is_active = TRUE;
+
+UPDATE component_types
+SET is_active = FALSE
+WHERE code = 'cache';
 
 INSERT INTO objective_types (code, label, unit, comparison)
 VALUES

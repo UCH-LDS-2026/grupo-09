@@ -6,7 +6,7 @@ export type NodeKind =
   | "database"
   | "queue";
 
-export type NodeStatus = "healthy" | "warning" | "saturated" | "failed";
+export type NodeStatus = "healthy" | "warning" | "high_load" | "saturated" | "error";
 
 export interface SimNode {
   id: string;
@@ -54,9 +54,9 @@ export interface SimResult {
 export const ALLOWED_CONNECTIONS: Record<NodeKind, NodeKind[]> = {
   api_gateway: ["load_balancer", "app_service"],
   load_balancer: ["app_service"],
-  app_service: ["app_service", "database", "cache", "queue"],
+  app_service: ["app_service", "database", "queue"],
   queue: ["app_service"],
-  cache: ["database"],
+  cache: [],
   database: [],
 };
 
@@ -221,24 +221,15 @@ export function validateConnection(
 }
 
 function connectionErrorMessage(sourceKind: NodeKind): string {
-  if (sourceKind === "load_balancer") {
-    return "Un balanceador de carga solo puede distribuir tráfico hacia servicios de aplicación.";
-  }
-
-  if (sourceKind === "database") {
-    return "La base de datos no puede ser origen de tráfico en este MVP.";
-  }
-
-  if (sourceKind === "api_gateway") {
-    return "La puerta de enlace solo puede enviar tráfico hacia un balanceador o servicio.";
-  }
-
-  return "Esta conexión no es válida para esta arquitectura.";
+  return sourceKind === "database"
+    ? "Esta conexión no es válida para el MVP. La base de datos no puede ser origen de tráfico."
+    : "Esta conexión no es válida para el MVP. El flujo debe ir desde entrada, distribución, procesamiento y almacenamiento.";
 }
 
 export function statusFor(load: number, errorRate = 0): NodeStatus {
-  if (errorRate >= 0.5) return "failed";
+  if (errorRate > 0) return "error";
   if (load >= 1.0) return "saturated";
+  if (load >= 0.9) return "high_load";
   if (load >= 0.7) return "warning";
   return "healthy";
 }
@@ -251,10 +242,8 @@ export function calculateLatency(baseLatency: number, load: number): number {
 }
 
 /**
- * Very simple flow simulation: traffic enters from nodes with no inbound
- * (sources). For each node, incoming offered load is divided across its
- * outgoing non-async edges. Async edges (queue) drain offered load instead of
- * propagating it downstream synchronously.
+ * MVP flow simulation: traffic starts at entry nodes, each node processes up to
+ * its installed capacity, and processed traffic is divided across outgoing edges.
  */
 export function simulate(nodes: SimNode[], edges: SimEdge[], trafficRps: number): SimResult {
   const incoming: Record<string, string[]> = {};
@@ -284,20 +273,12 @@ export function simulate(nodes: SimNode[], edges: SimEdge[], trafficRps: number)
     nodes.forEach((n) => {
       const outs = outgoing[n.id];
       if (!outs.length) return;
-      const syncOuts = outs.filter((e) => !e.async);
-      const asyncOuts = outs.filter((e) => e.async);
       const totalCap = n.capacity * n.instances;
       const served = Math.min(offered[n.id], totalCap);
-      // sync downstream get an even split of served traffic
-      if (syncOuts.length) {
-        const share = served / syncOuts.length;
-        syncOuts.forEach((e) => {
-          // accumulate but don't double count across iterations
-          offered[e.to] = Math.max(offered[e.to], share);
-        });
-      }
-      asyncOuts.forEach((e) => {
-        offered[e.to] = Math.max(offered[e.to], served * 0.4);
+      const share = served / outs.length;
+
+      outs.forEach((e) => {
+        offered[e.to] = Math.max(offered[e.to], share);
       });
     });
   }
@@ -331,7 +312,7 @@ export function simulate(nodes: SimNode[], edges: SimEdge[], trafficRps: number)
     }
     totalCost += cost;
 
-    if (!bottleneck || load > bottleneck.load) {
+    if (offered[n.id] > 0 && (!bottleneck || load > bottleneck.load)) {
       bottleneck = { id: n.id, name: n.name, load };
     }
   });
@@ -353,10 +334,7 @@ export function simulate(nodes: SimNode[], edges: SimEdge[], trafficRps: number)
       errorRate,
       throughput,
       cost: totalCost,
-      bottleneck:
-        bottleneck && bottleneck.load >= 0.7
-          ? { id: bottleneck.id, name: bottleneck.name }
-          : undefined,
+      bottleneck: bottleneck ? { id: bottleneck.id, name: bottleneck.name } : undefined,
     },
   };
 }

@@ -13,7 +13,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import {
   Play,
   Square,
@@ -26,80 +25,42 @@ import {
   Plus,
   ChevronLeft,
   ChevronRight,
-  LogOut,
-  Trash2,
-  Copy,
   FilePlus2,
   FolderX,
-  Link2,
+  MoreVertical,
+  Copy,
+  Eraser,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AuthUser } from "@/models/auth";
 import { projectService, type ProjectSummary } from "@/services/projectService";
-
-// ---------- Arquitectura inicial de ejemplo ----------
-const initialNodes: SimNode[] = [
-  { ...makeNode("api_gateway", 80, 220), id: "n_gw", name: "Puerta de enlace API" },
-  { ...makeNode("load_balancer", 320, 220), id: "n_lb", name: "Balanceador de carga" },
-  { ...makeNode("app_service", 580, 220), id: "n_app", name: "Servicio de aplicación" },
-  { ...makeNode("cache", 860, 110), id: "n_cache", name: "Caché" },
-  { ...makeNode("database", 860, 330), id: "n_db", name: "Base de datos" },
-  { ...makeNode("queue", 580, 420), id: "n_queue", name: "Cola" },
-];
-const initialEdges: SimEdge[] = [
-  { id: "e1", from: "n_gw", to: "n_lb" },
-  { id: "e2", from: "n_lb", to: "n_app" },
-  { id: "e3", from: "n_app", to: "n_cache" },
-  { id: "e4", from: "n_app", to: "n_db" },
-  { id: "e5", from: "n_app", to: "n_queue", async: true },
-];
-
-const NODE_W = 168;
-const NODE_H = 92;
-
-const STATUS_STYLES: Record<
-  "healthy" | "warning" | "saturated" | "failed",
-  { ring: string; glow: string; dot: string; label: string }
-> = {
-  healthy: {
-    ring: "ring-[color:var(--neon-cyan)]/40",
-    glow: "shadow-[var(--shadow-glow-cyan)]",
-    dot: "bg-[color:var(--status-healthy)]",
-    label: "Estable",
-  },
-  warning: {
-    ring: "ring-[color:var(--status-warning)]/60",
-    glow: "shadow-[var(--shadow-glow-warning)]",
-    dot: "bg-[color:var(--status-warning)]",
-    label: "Alerta",
-  },
-  saturated: {
-    ring: "ring-[color:var(--status-saturated)]/70",
-    glow: "shadow-[var(--shadow-glow-saturated)]",
-    dot: "bg-[color:var(--status-saturated)]",
-    label: "Saturado",
-  },
-  failed: {
-    ring: "ring-[color:var(--status-failed)]/80",
-    glow: "shadow-[var(--shadow-glow-saturated)]",
-    dot: "bg-[color:var(--status-failed)]",
-    label: "Falló",
-  },
-};
-
-const CATEGORIES: { name: string; kinds: NodeKind[] }[] = [
-  { name: "Tráfico y entrada", kinds: ["api_gateway", "load_balancer"] },
-  { name: "Cómputo", kinds: ["app_service"] },
-  { name: "Mensajería", kinds: ["queue"] },
-  { name: "Almacenamiento", kinds: ["cache", "database"] },
-];
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ConnectionsPanel } from "@/components/simulator/ConnectionsPanel";
+import { Metric } from "@/components/simulator/Metric";
+import { PropertiesPanel } from "@/components/simulator/PropertiesPanel";
+import { ResizeHandle } from "@/components/simulator/ResizeHandle";
+import { SystemConclusion } from "@/components/simulator/SystemConclusion";
+import { buildSystemConclusion } from "@/components/simulator/systemConclusionLogic";
+import {
+  CATEGORIES,
+  initialEdges,
+  initialNodes,
+  NODE_H,
+  NODE_W,
+  STATUS_STYLES,
+} from "@/components/simulator/simulatorConfig";
 
 interface SimulatorDashboardProps {
   user?: AuthUser;
-  onLogout?: () => void;
 }
 
-export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboardProps) {
+export default function SimulatorDashboard({ user }: SimulatorDashboardProps) {
   const [nodes, setNodes] = useState<SimNode[]>(initialNodes);
   const [edges, setEdges] = useState<SimEdge[]>(initialEdges);
   const [selectedId, setSelectedId] = useState<string | null>("n_app");
@@ -119,7 +80,17 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
   const [rightOpen, setRightOpen] = useState(true);
   const canvasRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef<{ id: string; offX: number; offY: number } | null>(null);
+  const pendingDragRef = useRef<{ id: string; x: number; y: number } | null>(null);
+  const dragFrameRef = useRef<number | null>(null);
   const resizeRef = useRef<{ side: "left" | "right"; startX: number; startW: number } | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (dragFrameRef.current) {
+        window.cancelAnimationFrame(dragFrameRef.current);
+      }
+    };
+  }, []);
 
   // Sidebar resize handlers (window-level so it keeps working over the canvas)
   const startResize = (side: "left" | "right") => (e: React.MouseEvent) => {
@@ -157,6 +128,10 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
     [nodes, edges, traffic, running],
   );
   const selected = nodes.find((n) => n.id === selectedId) ?? null;
+  const conclusion = useMemo(
+    () => buildSystemConclusion(nodes, result, traffic, running),
+    [nodes, result, traffic, running],
+  );
 
   const refreshProjects = useCallback(async () => {
     if (!user?.email) return;
@@ -209,9 +184,24 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
     if (!rect) return;
     const x = Math.max(8, Math.min(rect.width - NODE_W - 8, e.clientX - rect.left - drag.offX));
     const y = Math.max(8, Math.min(rect.height - NODE_H - 8, e.clientY - rect.top - drag.offY));
-    setNodes((prev) => prev.map((n) => (n.id === drag.id ? { ...n, x, y } : n)));
+    pendingDragRef.current = { id: drag.id, x, y };
+
+    if (dragFrameRef.current) return;
+
+    dragFrameRef.current = window.requestAnimationFrame(() => {
+      const pending = pendingDragRef.current;
+      dragFrameRef.current = null;
+      if (!pending) return;
+
+      setNodes((prev) =>
+        prev.map((n) => (n.id === pending.id ? { ...n, x: pending.x, y: pending.y } : n)),
+      );
+    });
   };
-  const stopDrag = () => (draggingRef.current = null);
+  const stopDrag = () => {
+    draggingRef.current = null;
+    pendingDragRef.current = null;
+  };
 
   // ---------- Library drag & drop (HTML5) ----------
   const onLibDragStart = (e: React.DragEvent, kind: NodeKind) => {
@@ -395,22 +385,22 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
     }
   };
 
-  const duplicateSelected = () => {
-    if (!selected) return;
-
-    const duplicatedNode: SimNode = {
-      ...selected,
-      id: `${selected.kind}_${Math.random().toString(36).slice(2, 8)}`,
-      name: `${selected.name} copia`,
-      x: selected.x + 32,
-      y: selected.y + 32,
-    };
-
-    setNodes((prev) => [...prev, duplicatedNode]);
-    setSelectedId(duplicatedNode.id);
+  const duplicateProject = () => {
+    setProjectId(null);
+    setProjectName(`${projectName.trim() || "proyecto"}-copia`);
     setConnectingFromId(null);
-    setPersistenceMessage("Componente duplicado.");
+    setPersistenceMessage("Proyecto duplicado como copia sin guardar.");
     setPersistenceError(null);
+  };
+
+  const clearCanvas = () => {
+    setNodes([]);
+    setEdges([]);
+    setSelectedId(null);
+    setConnectingFromId(null);
+    setPersistenceMessage("Canvas limpio.");
+    setPersistenceError(null);
+    draggingRef.current = null;
   };
 
   const deleteSelected = () => {
@@ -433,11 +423,9 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
             <Activity className="h-4 w-4 text-[color:var(--neon-cyan)]" />
           </div>
           <div className="min-w-0">
-            <div className="truncate text-sm font-semibold tracking-tight">
-              Simulador de arquitectura distribuida
-            </div>
+            <div className="truncate text-sm font-semibold tracking-tight">Simulador</div>
             <div className="mt-1 flex min-w-0 items-center gap-2 font-mono text-[11px] text-muted-foreground sm:mt-0.5">
-              <span className="shrink-0">proyecto /</span>
+              <span className="shrink-0">Proyecto actual:</span>
               <Input
                 value={projectName}
                 onChange={(event) => setProjectName(event.target.value)}
@@ -491,26 +479,45 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
           </Button>
           <Button
             size="sm"
-            variant="ghost"
-            onClick={deleteCurrentProject}
-            disabled={!projectId || isSaving}
-            className="shrink-0 text-[color:var(--status-saturated)] hover:bg-[color:var(--status-saturated)]/10 hover:text-[color:var(--status-saturated)]"
+            onClick={() => setRunning((value) => !value)}
+            className="shrink-0 bg-[color:var(--neon-violet)]/15 text-[color:var(--neon-violet)] ring-1 ring-[color:var(--neon-violet)]/45 hover:bg-[color:var(--neon-violet)]/25"
           >
-            <FolderX className="mr-1.5 h-3.5 w-3.5" /> Borrar proyecto
+            {running ? (
+              <>
+                <Square className="mr-1.5 h-3.5 w-3.5" /> Detener
+              </>
+            ) : (
+              <>
+                <Play className="mr-1.5 h-3.5 w-3.5" /> Ejecutar
+              </>
+            )}
           </Button>
-          {user && (
-            <div className="ml-2 hidden items-center gap-2 border-l border-border/60 pl-3 md:flex">
-              <div className="text-right">
-                <div className="max-w-32 truncate text-xs font-semibold">{user.name}</div>
-                <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                  {user.role}
-                </div>
-              </div>
-              <Button size="sm" variant="ghost" onClick={onLogout} title="Cerrar sesión">
-                <LogOut className="mr-1.5 h-3.5 w-3.5" /> Salir
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" variant="ghost" className="h-8 w-8 shrink-0 px-0">
+                <MoreVertical className="h-4 w-4" />
               </Button>
-            </div>
-          )}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={duplicateProject}>
+                <Copy className="h-4 w-4" />
+                Duplicar proyecto
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={clearCanvas}>
+                <Eraser className="h-4 w-4" />
+                Limpiar canvas
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={deleteCurrentProject}
+                disabled={!projectId || isSaving}
+                className="text-[color:var(--status-saturated)] focus:text-[color:var(--status-saturated)]"
+              >
+                <FolderX className="h-4 w-4" />
+                Borrar proyecto
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
 
@@ -713,7 +720,7 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
               const Icon = NODE_ICON[n.kind];
               const isSelected = n.id === selectedId;
               const isConnectingSource = n.id === connectingFromId;
-              const showAlert = status === "saturated" || status === "failed";
+              const showAlert = status === "saturated" || status === "error";
               return (
                 <div
                   key={n.id}
@@ -732,7 +739,7 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
                 >
                   {showAlert && (
                     <div className="alert-blink absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-[color:var(--status-saturated)]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[color:var(--status-saturated)] ring-1 ring-[color:var(--status-saturated)]/60">
-                      {status === "failed" ? "Componente caído" : "Tráfico excedido"}
+                      {status === "error" ? "Con errores" : "Tráfico excedido"}
                     </div>
                   )}
                   <div className="flex h-full flex-col justify-between p-3">
@@ -775,7 +782,7 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
                         background:
                           status === "healthy"
                             ? "var(--neon-cyan)"
-                            : status === "warning"
+                            : status === "warning" || status === "high_load"
                               ? "var(--status-warning)"
                               : "var(--status-saturated)",
                         boxShadow: `0 0 8px ${
@@ -798,25 +805,6 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
                   <div className="mt-1 font-mono text-xs text-[color:var(--neon-cyan)]">
                     {traffic} req/s
                   </div>
-                </div>
-                <div className="flex gap-1">
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => setRunning(true)}
-                    className="h-7 px-2 bg-[color:var(--neon-cyan)]/15 text-[color:var(--neon-cyan)] ring-1 ring-[color:var(--neon-cyan)]/50 hover:bg-[color:var(--neon-cyan)]/25"
-                  >
-                    <Play className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => setRunning(false)}
-                    className="h-7 px-2"
-                  >
-                    <Square className="h-3.5 w-3.5" />
-                  </Button>
                 </div>
               </div>
               <Slider
@@ -844,7 +832,7 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
               accent={result.totals.avgLatency > 200 ? "warn" : "cyan"}
             />
             <Metric
-              label="Salida real"
+              label="Salida procesada"
               value={`${result.totals.throughput.toFixed(0)} r/s`}
               icon={TrendingUp}
               accent="violet"
@@ -863,13 +851,14 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
             />
           </div>
 
+          <SystemConclusion conclusion={conclusion} />
+
           <section className="border-t border-border/60 bg-panel/60 p-3 lg:hidden">
             {selected ? (
               <PropertiesPanel
                 node={selected}
                 onChange={updateSelected}
                 onDelete={deleteSelected}
-                onDuplicate={duplicateSelected}
                 metrics={result.perNode[selected.id]}
               />
             ) : (
@@ -893,7 +882,6 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
                   node={selected}
                   onChange={updateSelected}
                   onDelete={deleteSelected}
-                  onDuplicate={duplicateSelected}
                   metrics={result.perNode[selected.id]}
                 />
               ) : (
@@ -923,327 +911,6 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
       >
         {rightOpen ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
       </button>
-    </div>
-  );
-}
-
-// ---------- Subcomponents ----------
-
-function Metric({
-  label,
-  value,
-  icon: Icon,
-  accent,
-}: {
-  label: string;
-  value: string;
-  icon: typeof Zap;
-  accent: "cyan" | "amber" | "violet" | "warn";
-}) {
-  const color =
-    accent === "cyan"
-      ? "var(--neon-cyan)"
-      : accent === "amber"
-        ? "var(--neon-amber)"
-        : accent === "violet"
-          ? "var(--neon-violet)"
-          : "var(--status-saturated)";
-  return (
-    <div className="rounded-lg border border-border/60 bg-card/60 p-3">
-      <div className="mb-1.5 flex items-center justify-between">
-        <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-          {label}
-        </span>
-        <Icon className="h-3.5 w-3.5" style={{ color }} />
-      </div>
-      <div className="font-mono text-lg font-semibold tracking-tight" style={{ color }}>
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function ConnectionsPanel({
-  nodes,
-  edges,
-  selected,
-  connectingFromId,
-  onStartConnection,
-  onCancelConnection,
-  onDeleteConnection,
-}: {
-  nodes: SimNode[];
-  edges: SimEdge[];
-  selected: SimNode | null;
-  connectingFromId: string | null;
-  onStartConnection: () => void;
-  onCancelConnection: () => void;
-  onDeleteConnection: (edgeId: string) => void;
-}) {
-  const nodeNames = new Map(nodes.map((node) => [node.id, node.name]));
-  const connectingNodeName = connectingFromId ? nodeNames.get(connectingFromId) : null;
-
-  return (
-    <div className="mt-auto space-y-3 border-t border-border/60 pt-3">
-      <div>
-        <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-          Conexiones
-        </div>
-        <p className="mt-1 text-xs text-muted-foreground/80">
-          {connectingNodeName
-            ? `Elegí destino para ${connectingNodeName}.`
-            : selected
-              ? `Origen: ${selected.name}`
-              : "Seleccioná un componente."}
-        </p>
-      </div>
-
-      <div className="flex gap-2">
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          disabled={!selected}
-          onClick={onStartConnection}
-          className={cn(
-            "flex-1 border-[color:var(--neon-cyan)]/45 bg-[color:var(--neon-cyan)]/5 text-[color:var(--neon-cyan)] hover:bg-[color:var(--neon-cyan)]/10 hover:text-[color:var(--neon-cyan)]",
-            connectingFromId &&
-              "border-[color:var(--neon-amber)]/65 bg-[color:var(--neon-amber)]/10 text-[color:var(--neon-amber)] hover:text-[color:var(--neon-amber)]",
-          )}
-        >
-          <Link2 className="h-4 w-4" />
-          {connectingFromId ? "Conectando" : "Conectar"}
-        </Button>
-        {connectingFromId && (
-          <Button type="button" size="sm" variant="ghost" onClick={onCancelConnection}>
-            Cancelar
-          </Button>
-        )}
-      </div>
-
-      <div className="max-h-40 space-y-1.5 overflow-y-auto">
-        {edges.length ? (
-          edges.map((edge) => (
-            <div
-              key={edge.id}
-              className="flex items-center justify-between gap-2 rounded-md bg-card/60 px-2.5 py-2 text-xs"
-            >
-              <span className="min-w-0 flex-1 truncate">
-                {nodeNames.get(edge.from) ?? edge.from} → {nodeNames.get(edge.to) ?? edge.to}
-              </span>
-              <button
-                type="button"
-                onClick={() => onDeleteConnection(edge.id)}
-                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[color:var(--status-saturated)] transition hover:bg-[color:var(--status-saturated)]/10"
-                title="Eliminar conexión"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ))
-        ) : (
-          <div className="rounded-md bg-card/50 p-2 text-xs text-muted-foreground">
-            Todavía no hay conexiones.
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function PropertiesPanel({
-  node,
-  onChange,
-  onDelete,
-  onDuplicate,
-  metrics,
-}: {
-  node: SimNode;
-  onChange: (patch: Partial<SimNode>) => void;
-  onDelete: () => void;
-  onDuplicate: () => void;
-  metrics?: {
-    load: number;
-    latency: number;
-    throughput: number;
-    errorRate: number;
-    status: "healthy" | "warning" | "saturated" | "failed";
-  };
-}) {
-  const meta = KIND_META[node.kind];
-  const Icon = NODE_ICON[node.kind];
-  const status = metrics?.status ?? "healthy";
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2.5">
-        <div
-          className="flex h-9 w-9 items-center justify-center rounded-md"
-          style={{
-            color: meta.color,
-            backgroundColor: `color-mix(in oklab, ${meta.color} 14%, transparent)`,
-            boxShadow: `inset 0 0 0 1px color-mix(in oklab, ${meta.color} 40%, transparent)`,
-          }}
-        >
-          <Icon className="h-4 w-4" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-            {meta.category}
-          </div>
-          <div className="truncate text-sm font-semibold">{meta.label}</div>
-        </div>
-        <Badge
-          variant="outline"
-          className="border-[color:var(--neon-cyan)]/40 font-mono text-[10px] uppercase"
-          style={{
-            color: STATUS_STYLES[status].dot.includes("healthy") ? undefined : undefined,
-          }}
-        >
-          {STATUS_STYLES[status].label}
-        </Badge>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2">
-        <Button type="button" variant="outline" onClick={onDuplicate}>
-          <Copy className="h-4 w-4" />
-          Duplicar
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          className="border-[color:var(--status-saturated)]/45 bg-[color:var(--status-saturated)]/5 text-[color:var(--status-saturated)] hover:bg-[color:var(--status-saturated)]/10 hover:text-[color:var(--status-saturated)]"
-          onClick={onDelete}
-        >
-          <Trash2 className="h-4 w-4" />
-          Eliminar
-        </Button>
-      </div>
-
-      <div className="space-y-3">
-        <Field label="Nombre">
-          <Input value={node.name} onChange={(e) => onChange({ name: e.target.value })} />
-        </Field>
-        <SliderField
-          label="Instancias"
-          value={node.instances}
-          min={1}
-          max={16}
-          step={1}
-          onChange={(v) => onChange({ instances: v })}
-          unit="×"
-        />
-        <SliderField
-          label="Capacidad (req/s por instancia)"
-          value={node.capacity}
-          min={50}
-          max={10000}
-          step={50}
-          onChange={(v) => onChange({ capacity: v })}
-        />
-        <SliderField
-          label="Latencia base"
-          value={node.baseLatency}
-          min={1}
-          max={300}
-          step={1}
-          onChange={(v) => onChange({ baseLatency: v })}
-          unit="ms"
-        />
-        <Field label="Costo por instancia ($/mes)">
-          <Input
-            type="number"
-            value={node.costPerInstance}
-            onChange={(e) => onChange({ costPerInstance: Number(e.target.value) || 0 })}
-          />
-        </Field>
-      </div>
-
-      {metrics && (
-        <div className="grid grid-cols-2 gap-2 border-t border-border/60 pt-3">
-          <MiniMetric label="Carga" value={`${(metrics.load * 100).toFixed(0)}%`} />
-          <MiniMetric label="Latencia" value={`${metrics.latency.toFixed(0)}ms`} />
-          <MiniMetric label="Salida" value={`${metrics.throughput.toFixed(0)}r/s`} />
-          <MiniMetric label="Error" value={`${(metrics.errorRate * 100).toFixed(1)}%`} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1.5">
-      <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-        {label}
-      </Label>
-      {children}
-    </div>
-  );
-}
-
-function SliderField({
-  label,
-  value,
-  onChange,
-  min,
-  max,
-  step,
-  unit,
-}: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-  min: number;
-  max: number;
-  step: number;
-  unit?: string;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between">
-        <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-          {label}
-        </Label>
-        <span className="font-mono text-xs text-[color:var(--neon-cyan)]">
-          {value}
-          {unit ?? ""}
-        </span>
-      </div>
-      <Slider
-        value={[value]}
-        onValueChange={(v) => onChange(v[0])}
-        min={min}
-        max={max}
-        step={step}
-      />
-    </div>
-  );
-}
-
-function MiniMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md bg-card/60 p-2 text-center">
-      <div className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
-        {label}
-      </div>
-      <div className="font-mono text-xs text-foreground">{value}</div>
-    </div>
-  );
-}
-
-function ResizeHandle({ onMouseDown }: { onMouseDown: (e: React.MouseEvent) => void }) {
-  return (
-    <div
-      onMouseDown={onMouseDown}
-      role="separator"
-      aria-orientation="vertical"
-      className="group relative z-10 hidden w-1 shrink-0 cursor-col-resize bg-border/60 transition-colors hover:bg-[color:var(--neon-cyan)]/60 lg:block"
-      title="Arrastrá para cambiar tamaño"
-    >
-      {/* Wider invisible hit area */}
-      <div className="absolute inset-y-0 -left-1.5 -right-1.5" />
-      {/* Grip indicator */}
-      <div className="pointer-events-none absolute left-1/2 top-1/2 h-8 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-foreground/30 group-hover:bg-[color:var(--neon-cyan)]" />
     </div>
   );
 }

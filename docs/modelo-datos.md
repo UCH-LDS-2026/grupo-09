@@ -47,7 +47,7 @@ Campos principales:
 
 ### `component_types`
 
-Define el catalogo de componentes disponibles: API Gateway, Load Balancer, App Service, Cache, Database y Queue.
+Define el catalogo de componentes disponibles para el MVP: API Gateway, Load Balancer, App Service, Database y Queue. Cache queda desactivado por ahora (`is_active = false`) para mantener simple la explicacion del simulador.
 
 Campos principales:
 
@@ -112,4 +112,4 @@ Preparan la persistencia futura de corridas de simulacion, metricas por nodo y r
 
 ## Estado para MVP
 
-Ya esta lista la parte necesaria para persistir proyectos: usuarios, proyectos, nodos, conexiones y catalogo de componentes. Para el MVP visual, alcanza con que el frontend pueda guardar y cargar diagramas. Las tablas de simulaciones, metricas y recomendaciones pueden quedar preparadas para fases posteriores.
+Ya esta lista la parte necesaria para persistir proyectos: usuarios, proyectos, nodos, conexiones dirigidas y catalogo de componentes. Para el MVP visual, alcanza con que el frontend pueda guardar y cargar diagramas. Las tablas de simulaciones, metricas y recomendaciones quedan preparadas para fases posteriores.

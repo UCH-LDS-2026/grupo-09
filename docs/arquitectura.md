@@ -1,77 +1,53 @@
-# Arquitectura MVC del Sistema
+# Arquitectura del MVP
 
-## Objetivo
+El MVP es un simulador visual básico de arquitectura distribuida.
 
-El sistema es la version grafica de un simulador de arquitecturas distribuidas. La aplicacion debe permitir iniciar sesion, crear componentes, conectarlos, simular trafico y visualizar metricas como latencia, costo, errores y cuellos de botella.
+El usuario puede:
 
-## Patron MVC aplicado
+1. Crear un proyecto.
+2. Arrastrar componentes al canvas.
+3. Conectar componentes válidos.
+4. Configurar tráfico.
+5. Ejecutar o detener la simulación.
+6. Ver carga, salida procesada, latencia, error, costo, cuello de botella y conclusión.
+7. Guardar y cargar proyectos desde backend/base de datos.
 
-La aplicacion usa React + TanStack Router, pero se organiza con responsabilidades MVC:
+## Capas
 
-- **Modelo (`src/models`)**: define los datos del dominio. Ejemplo: usuario, credenciales y sesion.
-- **Vista (`src/views`)**: renderiza pantallas completas y recibe datos/acciones por props. Ejemplo: `LoginView`, `SimulatorView`.
-- **Controlador (`src/controllers`)**: coordina estado, reglas de flujo y comunicacion con servicios. Ejemplo: `AppController`, `useAuthController`.
-- **Servicios (`src/services`)**: encapsulan acceso a datos externos o persistencia. Ejemplo: `authService`, preparado para reemplazar `localStorage` por API real.
-- **Componentes reutilizables (`src/components`)**: piezas visuales compartidas y UI del simulador.
-- **Librerias de dominio (`src/lib`)**: logica pura reutilizable, como calculos de simulacion e iconos por tipo de nodo.
-- **Rutas (`src/routes`)**: conectan URLs con controladores/pantallas.
+- `src/controllers`: coordina la pantalla principal.
+- `src/views`: monta la vista del simulador.
+- `src/components`: contiene el dashboard y piezas visuales del simulador.
+- `src/lib/simulator.ts`: reglas de conexión, cálculo de métricas y estados.
+- `src/services/projectService.ts`: conexión frontend-backend para proyectos.
+- `backend/src`: API HTTP, servicios y acceso a MySQL.
+- `database`: schema y migraciones.
 
-## Estructura inicial
+## Flujo Principal
 
-```text
-src/
-  controllers/
-    AppController.tsx
-    useAuthController.ts
-  models/
-    auth.ts
-  services/
-    authService.ts
-  views/
-    auth/
-      LoginView.tsx
-    simulator/
-      SimulatorView.tsx
-  components/
-    SimulatorDashboard.tsx
-    ui/
-  lib/
-    simulator.ts
-    node-icons.ts
-    utils.ts
-  routes/
-    __root.tsx
-    index.tsx
+```txt
+SimulatorDashboard
+  -> projectService
+  -> backend /api/projects
+  -> MySQL
 ```
 
-## Flujo de login
+## Componentes Del MVP
 
-1. `src/routes/index.tsx` carga `AppController`.
-2. `AppController` consulta `useAuthController`.
-3. `useAuthController` recupera la sesion desde `authService`.
-4. Si no hay sesion, se renderiza `LoginView`.
-5. Si las credenciales son validas, `authService` guarda la sesion y el controlador muestra `SimulatorView`.
-6. `SimulatorView` carga el dashboard grafico y permite cerrar sesion.
+- API Gateway
+- Load Balancer
+- App Service
+- Database
+- Queue
 
-Credenciales demo:
+Cache queda desactivado por ahora para mantener simple la explicación.
 
-```text
-admin@sistema.test / admin123
-arquitecto@sistema.test / demo1234
-```
+## Seguridad Actual
 
-## Reglas para seguir construyendo
+El MVP usa un usuario demo fijo para guardar proyectos. Esto evita simular un login real inseguro.
 
-- Las vistas no deben consultar directamente APIs ni `localStorage`.
-- Los controladores no deben mezclar estilos o JSX complejo de pantalla.
-- Los servicios pueden cambiar de implementacion sin romper las vistas.
-- Los modelos deben ser la fuente de verdad para tipos e interfaces.
-- La logica de simulacion debe mantenerse como dominio puro en `src/lib` o moverse luego a `src/models/simulator` si crece.
+Para una fase posterior:
 
-## Proximos modulos sugeridos
-
-- Proyectos de arquitectura: crear, listar, abrir y guardar diagramas.
-- Usuarios y roles: admin, arquitecto y visor.
-- Persistencia real: API para guardar nodos, conexiones y configuraciones.
-- Validaciones: limites de conexiones, nombres duplicados y componentes obligatorios.
-- Exportacion: guardar arquitectura como JSON o imagen.
+- autenticación real,
+- sesiones,
+- permisos por usuario,
+- validación backend más estricta.

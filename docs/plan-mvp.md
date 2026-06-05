@@ -1,137 +1,146 @@
 # Plan MVP por fases
 
-Este plan ordena el trabajo desde un MVP visual y funcional hacia un sistema con backend mas completo. La prioridad inicial es que la aplicacion se pueda mostrar, usar y explicar con claridad antes de profundizar en funcionalidades internas.
+Este plan refleja el estado actual del proyecto después de la limpieza del MVP. La prioridad es mantener un producto básico, entendible y funcional antes de sumar complejidad.
 
-## Fase 1 - Cierre visual del simulador
+## Estado actual
 
-Objetivo: que el producto se sienta usable y presentable como MVP.
+Ya está avanzado:
 
-Alcance:
+- Canvas central con nodos y flechas dirigidas.
+- Sidebar izquierdo simple con componentes MVP.
+- Panel derecho de propiedades básico.
+- Creación, conexión, edición y eliminación de componentes.
+- Reglas de conexión para MVP.
+- Métricas globales: tráfico total, salida procesada, latencia, error y costo.
+- Estados visuales por componente.
+- Conclusión automática con cuello de botella y recomendación simple.
+- Guardado, carga, actualización y borrado de proyectos con backend y MySQL.
+- Base de datos alineada al MVP, con `cache` desactivado.
 
-- Ajustar el dashboard para desktop y pantallas chicas.
-- Ordenar la barra superior para que las acciones principales no se encimen.
-- Mejorar los estados de guardado, error y carga de proyectos.
-- Mejorar el estado vacio del canvas.
-- Hacer mas clara la biblioteca de componentes.
-- Mantener visibles las metricas importantes sin saturar la pantalla.
-- Revisar textos, espaciados, botones y jerarquias visuales.
+## Issues del tablero
 
-Criterio de cierre:
+Según la lista abierta:
 
-- El frontend compila.
-- El usuario puede iniciar sesion demo.
-- El usuario puede entender rapidamente donde arrastrar componentes, donde editar propiedades y donde guardar.
-- La interfaz no se rompe en desktop ni en mobile basico.
+- `#8 Implementar estimación básica de costo y sugerencia`: parcialmente cubierto. Ya hay costo mensual y recomendación de instancias.
+- `#7 Mostrar estados visuales, alertas y métricas`: cubierto para MVP.
+- `#6 Implementar motor de simulación por ciclos`: pendiente principal.
+- `#5 Crear panel de edición de propiedades por componente`: cubierto para MVP.
+- `#4 Implementar canvas con agregado y conexión de nodos`: cubierto para MVP.
+- `#3 Panel derecho configuracion`: pendiente principal de refinamiento.
+- `#2 Canvas Central`: cubierto para MVP.
+- `#1 Sidebar izquierda`: cubierto para MVP.
 
-## Fase 2 - Interaccion completa del editor y proyectos
+Los issues principales para seguir son `#6` y `#3`.
 
-Objetivo: completar acciones esperables del editor visual y cerrar el flujo minimo de proyectos con nombre.
+## Fase 1 - Cierre MVP Visual
 
-Alcance:
+Estado: avanzado.
 
-- Crear proyectos nuevos desde la interfaz.
-- Editar el nombre del proyecto antes de guardar.
-- Guardar, listar, cargar, renombrar y eliminar proyectos.
-- Crear conexiones entre nodos desde la interfaz.
-- Eliminar conexiones.
-- Duplicar nodos.
-- Limpiar canvas.
-- Agregar confirmacion visual para acciones destructivas.
-- Mejorar seleccion y foco de nodos.
-- Preparar atajos simples si aportan valor.
+Objetivo: que el simulador sea simple, presentable y usable.
 
-Criterio de cierre:
+Falta revisar:
 
-- Un usuario puede construir un diagrama propio sin depender del ejemplo inicial.
-- Puede corregir errores sin reiniciar todo el proyecto.
-- Puede guardar un proyecto con nombre, volver a abrirlo y eliminarlo si ya no lo necesita.
-
-## Fase 3 - Persistencia de proyectos completa
-
-Objetivo: que guardar, cargar, actualizar y eliminar proyectos sea confiable.
-
-Alcance:
-
-- Consolidar `GET /api/projects`.
-- Consolidar `GET /api/projects/:id`.
-- Consolidar `POST /api/projects`.
-- Consolidar `PUT /api/projects/:id`.
-- Agregar `DELETE /api/projects/:id`.
-- Agregar validaciones de payload.
-- Mostrar mensajes de error entendibles desde el frontend.
+- Ajustes finos responsive.
+- Reducir brillos/animaciones si molestan en demo.
+- Revisar textos finales de botones y mensajes.
 
 Criterio de cierre:
 
-- Un usuario puede crear varios proyectos, abrirlos, modificarlos y eliminarlos.
-- La base conserva nodos y conexiones sin perdida de datos.
+- El usuario entiende el flujo sin explicación larga.
+- Puede armar `API Gateway -> Load Balancer -> App Service -> Database`.
 
-## Fase 3 bis - Reglas del simulador MVP
+## Fase 2 - Panel derecho configuración (`#3`)
 
-Objetivo: que el simulador no sea solo visual, sino coherente con reglas basicas de arquitectura distribuida.
+Estado: próxima prioridad.
 
-Alcance:
-
-- Bloquear conexiones libres entre cualquier componente.
-- Permitir solo conexiones validas: API Gateway hacia Load Balancer/App Service, Load Balancer hacia App Service, App Service hacia App Service/Database/Cache/Queue, Queue hacia App Service y Cache hacia Database.
-- Bloquear ciclos simples para evitar flujos ambiguos en el MVP.
-- Marcar como asincronica la conexion App Service hacia Queue.
-- Calcular carga, salida real, error, latencia, costo y cuello de botella desde `src/lib/simulator.ts`.
-- Renombrar metricas visuales ambiguas, como rendimiento, por salida real.
-
-Criterio de cierre:
-
-- Intentar conectar Load Balancer hacia Database muestra error y no crea conexion.
-- Un flujo Load Balancer hacia App Service con 400 req/s y capacidad 800 req/s muestra carga cercana a 50%.
-- Un flujo con 1200 req/s sobre App Service de 800 req/s muestra saturacion y error mayor a 0%.
-
-## Fase 4 - Autenticacion minima para MVP
-
-Objetivo: reemplazar el login demo local por un flujo backend simple.
+Objetivo: convertir el panel derecho en un panel claro de configuración del componente seleccionado.
 
 Alcance:
 
-- Crear endpoints de login y sesion.
-- Persistir usuarios reales o seeds demo en MySQL.
-- Validar email y password.
-- Devolver usuario y token simple.
-- Asociar proyectos al usuario autenticado.
+- Ordenar campos por importancia: nombre, instancias, capacidad, latencia y costo.
+- Mostrar métricas por componente de forma más limpia: carga, salida procesada, error y estado.
+- Separar visualmente configuración editable de resultados calculados.
+- Agregar mensajes de ayuda mínimos sin sobrecargar.
+- Evitar controles que no afecten al MVP.
 
 Criterio de cierre:
 
-- El login ya no depende solo de `localStorage`.
-- Los proyectos se listan por usuario autenticado.
+- Seleccionar un nodo muestra sólo lo necesario para configurarlo.
+- Cambiar instancias/capacidad actualiza métricas y conclusión.
+- El panel no parece una herramienta avanzada innecesaria.
+
+## Fase 3 - Motor de simulación por ciclos (`#6`)
+
+Estado: próxima prioridad fuerte.
+
+Objetivo: mejorar el motor actual para simular pasos/ciclos de procesamiento sin volverlo complejo.
+
+Alcance:
+
+- Separar el cálculo en ciclos discretos simples.
+- En cada ciclo, propagar tráfico desde nodos de entrada hacia salidas.
+- Calcular por nodo: tráfico recibido, capacidad total, salida procesada, tráfico perdido, error, latencia y estado.
+- Detectar cuello de botella como el nodo activo con mayor carga.
+- Mantener fórmulas entendibles y documentadas.
+
+Criterio de cierre:
+
+- El resultado es coherente en cadenas lineales.
+- El resultado es coherente cuando un App Service deriva tráfico a Database y Queue.
+- La conclusión explica el cuello de botella con números.
+
+## Fase 4 - Seguridad y validaciones backend
+
+Estado: pendiente.
+
+Objetivo: reforzar el mínimo backend que ya une front y base de datos.
+
+Alcance:
+
+- Validar payloads de proyecto, nodos y conexiones.
+- Rechazar conexiones inválidas también del lado backend.
+- Evitar guardar nodos con valores negativos o tipos desconocidos.
+- Preparar autenticación real para más adelante sin simular seguridad falsa.
+
+Criterio de cierre:
+
+- El backend no guarda datos incoherentes aunque el frontend falle.
+- Los errores vuelven con mensajes claros.
 
 ## Fase 5 - Simulaciones persistidas
 
-Objetivo: guardar resultados de simulacion para consulta posterior.
+Estado: futura.
+
+Objetivo: guardar corridas de simulación y recomendaciones.
 
 Alcance:
 
-- Crear endpoint para ejecutar/guardar simulacion.
+- Endpoint para ejecutar/guardar simulación.
 - Persistir `simulation_runs`.
 - Persistir `simulation_node_metrics`.
 - Persistir `scaling_recommendations`.
-- Mostrar historial basico de corridas en el frontend.
+- Mostrar historial básico.
 
 Criterio de cierre:
 
-- Cada corrida importante puede guardarse y revisarse.
+- Una corrida se puede consultar después de guardar.
 - Las recomendaciones tienen respaldo en base de datos.
 
-## Fase 6 - Entrega y presentacion
+## Fase 6 - Entrega y presentación
 
-Objetivo: preparar el proyecto para evaluacion o demo.
+Estado: futura.
+
+Objetivo: dejar el proyecto fácil de levantar, explicar y defender.
 
 Alcance:
 
-- Actualizar README con comandos reales.
-- Documentar arquitectura frontend/backend/base de datos.
-- Agregar capturas o flujo de demo.
-- Revisar `.env.example`.
-- Preparar pasos para levantar MySQL, backend y frontend.
-- Agregar checklist de funcionalidades MVP.
+- README con comandos reales.
+- Checklist de demo.
+- Variables `.env.example` revisadas.
+- Pasos para MySQL, backend y frontend.
+- Capturas o descripción del flujo principal.
 
 Criterio de cierre:
 
-- Cualquier integrante puede clonar, configurar y ejecutar el proyecto.
-- El alcance del MVP queda claro y defendible.
+- Cualquier integrante puede levantar el proyecto.
+- El alcance MVP queda claro.

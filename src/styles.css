@@ -38,7 +38,7 @@
   --color-status-healthy: var(--status-healthy);
   --color-status-warning: var(--status-warning);
   --color-status-saturated: var(--status-saturated);
-  --color-status-failed: var(--status-failed);
+  --color-status-error: var(--status-error);
 
   --color-neon-cyan: var(--neon-cyan);
   --color-neon-violet: var(--neon-violet);
@@ -89,7 +89,7 @@
   --status-healthy: oklch(0.78 0.18 195);    /* cyan */
   --status-warning: oklch(0.82 0.17 85);     /* amber */
   --status-saturated: oklch(0.68 0.24 25);   /* red-orange */
-  --status-failed: oklch(0.55 0.22 15);      /* deep red */
+  --status-error: oklch(0.55 0.22 15);       /* deep red */
 
   --neon-cyan: oklch(0.82 0.16 195);
   --neon-violet: oklch(0.70 0.22 295);
