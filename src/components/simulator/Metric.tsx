@@ -18,14 +18,14 @@ export function Metric({ label, value, icon: Icon, accent }: MetricProps) {
           : "var(--status-saturated)";
 
   return (
-    <div className="rounded-lg border border-border/60 bg-card/60 p-3">
-      <div className="mb-1.5 flex items-center justify-between">
-        <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+    <div className="min-h-24 rounded-lg border border-border/60 bg-card/60 p-3.5">
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <span className="min-w-0 break-words font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
           {label}
         </span>
-        <Icon className="h-3.5 w-3.5" style={{ color }} />
+        <Icon className="h-4 w-4 shrink-0" style={{ color }} />
       </div>
-      <div className="font-mono text-lg font-semibold tracking-tight" style={{ color }}>
+      <div className="break-words font-mono text-xl font-semibold tracking-tight" style={{ color }}>
         {value}
       </div>
     </div>

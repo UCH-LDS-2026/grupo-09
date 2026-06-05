@@ -1,4 +1,5 @@
 import { getDatabasePool } from "../config/database.js";
+import { normalizeProjectGraph } from "../../../shared/simulator-core.js";
 
 const DEFAULT_PASSWORD_HASH = "demo-user-managed-by-api";
 
@@ -46,15 +47,17 @@ function normalizeProjectPayload(payload = {}) {
     throw createHttpError(400, "El proyecto debe tener al menos un nodo.");
   }
 
+  const graph = normalizeProjectGraph(nodes, edges, { requirePosition: true });
+
   return {
     id: payload.id ? Number(payload.id) : null,
     user: normalizeUser(payload.user),
-    name,
+    name: name.slice(0, 160),
     description: payload.description ? String(payload.description) : null,
     traffic,
     running,
-    nodes,
-    edges,
+    nodes: graph.nodes,
+    edges: graph.edges,
   };
 }
 
@@ -139,7 +142,7 @@ async function replaceProjectNodesAndEdges(connection, projectId, nodes, edges) 
         toNumber(node.y),
         Math.max(1, Math.round(toNumber(node.instances))),
         Math.max(1, Math.round(toNumber(node.capacity))),
-        Math.max(1, Math.round(toNumber(node.baseLatency))),
+        Math.max(0, Math.round(toNumber(node.baseLatency))),
         Math.max(0, Math.round(toNumber(node.queueSize))),
         Math.max(0, Math.round(toNumber(node.timeout))),
         Math.max(0, toNumber(node.costPerInstance)),

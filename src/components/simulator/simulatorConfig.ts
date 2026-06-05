@@ -6,8 +6,8 @@ import {
   type SimNode,
 } from "@/lib/simulator";
 
-export const NODE_W = 168;
-export const NODE_H = 92;
+export const NODE_W = 208;
+export const NODE_H = 116;
 
 export const initialNodes: SimNode[] = [
   { ...makeNode("api_gateway", 80, 220), id: "n_gw", name: "API Gateway" },

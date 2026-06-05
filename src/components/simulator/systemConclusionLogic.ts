@@ -53,18 +53,23 @@ export function buildSystemConclusion(
 
   const limitRps = Math.max(0, Math.round(bottleneckMetrics.capacity));
   const incomingRps = Math.round(bottleneckMetrics.incoming);
+  const queuedRps = Math.round(bottleneckMetrics.queued);
   const saturated = bottleneckMetrics.load >= 1;
   const recommendedInstances = Math.max(
     bottleneck.instances,
     Math.ceil(bottleneckMetrics.incoming / Math.max(bottleneck.capacity, 1)),
   );
+  const bottleneckReason =
+    result.totals.bottleneck?.reason ??
+    `recibe ${incomingRps} req/s contra ${limitRps} req/s de capacidad`;
 
   if (saturated) {
     return {
       title: "Conclusión del sistema",
       summary: "La arquitectura está saturada.",
       details: [
-        `El cuello de botella es ${bottleneck.name} porque recibe ${incomingRps} req/s y su capacidad máxima es ${limitRps} req/s.`,
+        `El cuello de botella es ${bottleneck.name}: ${bottleneckReason}.`,
+        `El motor corrió ${result.totals.cycles} ciclos; la cola promedio del nodo es ${queuedRps} req/s.`,
         `La salida procesada es ${result.totals.throughput.toFixed(0)} req/s y el error global es ${errorPercent}%.`,
         `Recomendación: aumentar ${bottleneck.name} de ${bottleneck.instances} a ${recommendedInstances} instancias.`,
         `Costo mensual estimado: $${totalCost}.`,
@@ -77,8 +82,9 @@ export function buildSystemConclusion(
     title: "Conclusión del sistema",
     summary: `Con ${traffic} req/s, la arquitectura funcionaría normalmente.`,
     details: [
+      `El motor corrió ${result.totals.cycles} ciclos discretos para propagar tráfico y colas.`,
       `La salida procesada es ${result.totals.throughput.toFixed(0)} req/s, con error global de ${errorPercent}%.`,
-      `El primer cuello de botella probable será ${bottleneck.name} cerca de ${limitRps} req/s.`,
+      `El primer cuello de botella probable será ${bottleneck.name}: ${bottleneckReason}.`,
       `Costo mensual estimado de la arquitectura: $${totalCost}.`,
     ],
     accent: bottleneckMetrics.load >= 0.7 ? "amber" : "cyan",

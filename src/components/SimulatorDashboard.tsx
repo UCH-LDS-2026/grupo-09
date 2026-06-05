@@ -7,6 +7,7 @@ import {
   type NodeKind,
   type SimEdge,
   type SimNode,
+  type SimResult,
 } from "@/lib/simulator";
 import { NODE_ICON } from "@/lib/node-icons";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { AuthUser } from "@/models/auth";
 import { projectService, type ProjectSummary } from "@/services/projectService";
+import { simulationService } from "@/services/simulationService";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -72,10 +74,11 @@ export default function SimulatorDashboard({ user }: SimulatorDashboardProps) {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [isLoadingProjects, setIsLoadingProjects] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [backendResult, setBackendResult] = useState<SimResult | null>(null);
   const [persistenceMessage, setPersistenceMessage] = useState<string | null>(null);
   const [persistenceError, setPersistenceError] = useState<string | null>(null);
   const [leftWidth, setLeftWidth] = useState(256);
-  const [rightWidth, setRightWidth] = useState(320);
+  const [rightWidth, setRightWidth] = useState(360);
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -107,7 +110,7 @@ export default function SimulatorDashboard({ user }: SimulatorDashboardProps) {
       if (r.side === "left") {
         setLeftWidth(Math.max(160, Math.min(480, r.startW + delta)));
       } else {
-        setRightWidth(Math.max(220, Math.min(520, r.startW - delta)));
+        setRightWidth(Math.max(320, Math.min(560, r.startW - delta)));
       }
     };
     const onUp = () => {
@@ -123,10 +126,11 @@ export default function SimulatorDashboard({ user }: SimulatorDashboardProps) {
     document.body.style.userSelect = "none";
   };
 
-  const result = useMemo(
+  const localResult = useMemo(
     () => simulate(nodes, edges, running ? traffic : 0),
     [nodes, edges, traffic, running],
   );
+  const result = backendResult ?? localResult;
   const selected = nodes.find((n) => n.id === selectedId) ?? null;
   const conclusion = useMemo(
     () => buildSystemConclusion(nodes, result, traffic, running),
@@ -152,6 +156,34 @@ export default function SimulatorDashboard({ user }: SimulatorDashboardProps) {
   useEffect(() => {
     void refreshProjects();
   }, [refreshProjects]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setBackendResult(null);
+    const timeoutId = window.setTimeout(() => {
+      simulationService
+        .run(
+          {
+            nodes,
+            edges,
+            traffic: running ? traffic : 0,
+          },
+          controller.signal,
+        )
+        .then((nextResult) => {
+          setBackendResult(nextResult);
+        })
+        .catch((error) => {
+          if (error instanceof DOMException && error.name === "AbortError") return;
+          setBackendResult(null);
+        });
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      controller.abort();
+    };
+  }, [nodes, edges, traffic, running]);
 
   // ---------- Drag nodes on canvas ----------
   const onNodeMouseDown = (e: React.MouseEvent, n: SimNode) => {
@@ -742,33 +774,38 @@ export default function SimulatorDashboard({ user }: SimulatorDashboardProps) {
                       {status === "error" ? "Con errores" : "Tráfico excedido"}
                     </div>
                   )}
-                  <div className="flex h-full flex-col justify-between p-3">
+                  <div className="flex h-full flex-col justify-between p-3.5">
                     <div className="flex items-start justify-between">
                       <div
-                        className="pulse-glow flex h-8 w-8 items-center justify-center rounded-md"
+                        className="pulse-glow flex h-9 w-9 items-center justify-center rounded-md"
                         style={{
                           color: meta.color,
                           backgroundColor: `color-mix(in oklab, ${meta.color} 14%, transparent)`,
                           boxShadow: `inset 0 0 0 1px color-mix(in oklab, ${meta.color} 40%, transparent)`,
                         }}
                       >
-                        <Icon className="h-4 w-4" />
+                        <Icon className="h-5 w-5" />
                       </div>
                       <div className="flex items-center gap-1.5">
                         <span className={cn("h-1.5 w-1.5 rounded-full", styles.dot)} />
-                        <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
+                        <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                           {styles.label}
                         </span>
                       </div>
                     </div>
 
-                    <div>
-                      <div className="truncate text-[13px] font-semibold leading-tight">
-                        {n.name}
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold leading-tight">{n.name}</div>
+                      <div className="mt-1 flex min-w-0 flex-wrap gap-x-2 gap-y-1 font-mono text-[11px] leading-4 text-muted-foreground">
+                        <span>{n.instances}x</span>
+                        <span>{n.capacity} r/s</span>
+                        <span className="text-[color:var(--neon-cyan)]">
+                          {((m?.load ?? 0) * 100).toFixed(0)}%
+                        </span>
                       </div>
-                      <div className="font-mono text-[10px] text-muted-foreground">
-                        {n.instances}× · {n.capacity} r/s · carga{" "}
-                        {((m?.load ?? 0) * 100).toFixed(0)}%
+                      <div className="font-mono text-[10px] leading-4 text-muted-foreground/80">
+                        cola {(m?.queued ?? 0).toFixed(0)} r/s · error{" "}
+                        {((m?.errorRate ?? 0) * 100).toFixed(1)}%
                       </div>
                     </div>
                   </div>
@@ -818,7 +855,7 @@ export default function SimulatorDashboard({ user }: SimulatorDashboardProps) {
           </div>
 
           {/* Métricas inferiores */}
-          <div className="grid shrink-0 grid-cols-2 gap-3 border-t border-border/60 bg-panel/50 p-3 md:grid-cols-5">
+          <div className="grid shrink-0 grid-cols-1 gap-3 border-t border-border/60 bg-panel/50 p-3 sm:grid-cols-2 xl:grid-cols-5">
             <Metric
               label="Tráfico total"
               value={`${Math.round(traffic)} req/s`}
