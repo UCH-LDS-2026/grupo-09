@@ -96,6 +96,25 @@ export function normalizeProjectGraph(
 ): { nodes: SimNode[]; edges: SimEdge[] };
 export function statusFor(load: number, errorRate?: number): NodeStatus;
 export function calculateLatency(baseLatency: number, load: number): number;
+export function calculateNodeCapacity(instances: number, capacityPerInstance: number): number;
+export function calculateNodeTrafficMetrics(input: {
+  trafficRps: number;
+  instances: number;
+  capacityPerInstance: number;
+}): {
+  incoming: number;
+  capacity: number;
+  load: number;
+  throughput: number;
+  dropped: number;
+  errorRate: number;
+  status: NodeStatus;
+};
+export function recommendInstancesForTraffic(
+  trafficRps: number,
+  capacityPerInstance: number,
+  currentInstances?: number,
+): number;
 export function simulate(nodes: SimNode[], edges: SimEdge[], trafficRps: number): SimResult;
 export function normalizeSimulationPayload(payload?: unknown): {
   traffic: number;

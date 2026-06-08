@@ -31,6 +31,7 @@ import {
   MoreVertical,
   Copy,
   Eraser,
+  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AuthUser } from "@/models/auth";
@@ -60,9 +61,10 @@ import {
 
 interface SimulatorDashboardProps {
   user?: AuthUser;
+  onLogout?: () => void;
 }
 
-export default function SimulatorDashboard({ user }: SimulatorDashboardProps) {
+export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboardProps) {
   const [nodes, setNodes] = useState<SimNode[]>(initialNodes);
   const [edges, setEdges] = useState<SimEdge[]>(initialEdges);
   const [selectedId, setSelectedId] = useState<string | null>("n_app");
@@ -94,6 +96,17 @@ export default function SimulatorDashboard({ user }: SimulatorDashboardProps) {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!persistenceMessage && !persistenceError) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setPersistenceMessage(null);
+      setPersistenceError(null);
+    }, 10000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [persistenceMessage, persistenceError]);
 
   // Sidebar resize handlers (window-level so it keeps working over the canvas)
   const startResize = (side: "left" | "right") => (e: React.MouseEvent) => {
@@ -468,17 +481,9 @@ export default function SimulatorDashboard({ user }: SimulatorDashboardProps) {
         </div>
 
         <div className="flex min-w-0 items-center gap-2 overflow-x-auto pb-1 lg:overflow-visible lg:pb-0">
-          {(persistenceMessage || persistenceError) && (
-            <span
-              className={cn(
-                "max-w-44 shrink-0 truncate font-mono text-[11px]",
-                persistenceError
-                  ? "text-[color:var(--status-saturated)]"
-                  : "text-[color:var(--neon-cyan)]",
-              )}
-              title={persistenceError ?? persistenceMessage ?? undefined}
-            >
-              {persistenceError ?? persistenceMessage}
+          {user?.email && (
+            <span className="hidden max-w-44 shrink-0 truncate font-mono text-[11px] text-muted-foreground sm:block">
+              {user.email}
             </span>
           )}
           <select
@@ -548,10 +553,35 @@ export default function SimulatorDashboard({ user }: SimulatorDashboardProps) {
                 <FolderX className="h-4 w-4" />
                 Borrar proyecto
               </DropdownMenuItem>
+              {onLogout && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={onLogout}>
+                    <LogOut className="h-4 w-4" />
+                    Cerrar sesión
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
       </header>
+
+      {(persistenceMessage || persistenceError) && (
+        <div className="pointer-events-none fixed inset-x-3 bottom-6 z-50 flex justify-center">
+          <div
+            className={cn(
+              "max-w-[min(92vw,520px)] rounded-lg border px-4 py-3 text-center text-sm shadow-2xl backdrop-blur",
+              persistenceError
+                ? "border-[color:var(--status-saturated)]/50 bg-[color:var(--status-saturated)]/15 text-[color:var(--status-saturated)]"
+                : "border-[color:var(--neon-cyan)]/45 bg-panel/90 text-[color:var(--neon-cyan)]",
+            )}
+            role={persistenceError ? "alert" : "status"}
+          >
+            {persistenceError ?? persistenceMessage}
+          </div>
+        </div>
+      )}
 
       {/* ---------- Layout principal ---------- */}
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">

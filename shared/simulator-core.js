@@ -330,6 +330,41 @@ export function calculateLatency(baseLatency, load) {
   return Math.round(baseLatency * 3);
 }
 
+export function calculateNodeCapacity(instances, capacityPerInstance) {
+  return Math.max(0, Number(instances) || 0) * Math.max(0, Number(capacityPerInstance) || 0);
+}
+
+export function calculateNodeTrafficMetrics({
+  trafficRps,
+  instances,
+  capacityPerInstance,
+}) {
+  const incoming = Math.max(0, Number(trafficRps) || 0);
+  const capacity = calculateNodeCapacity(instances, capacityPerInstance);
+  const throughput = Math.min(incoming, capacity);
+  const dropped = Math.max(0, incoming - throughput);
+  const load = capacity > 0 ? incoming / capacity : 0;
+  const errorRate = incoming > 0 ? dropped / incoming : 0;
+
+  return {
+    incoming,
+    capacity,
+    load,
+    throughput,
+    dropped,
+    errorRate,
+    status: statusFor(load, errorRate),
+  };
+}
+
+export function recommendInstancesForTraffic(trafficRps, capacityPerInstance, currentInstances = 1) {
+  const capacity = Math.max(1, Number(capacityPerInstance) || 1);
+  const current = Math.max(1, Math.round(Number(currentInstances) || 1));
+  const required = Math.max(1, Math.ceil(Math.max(0, Number(trafficRps) || 0) / capacity));
+
+  return Math.max(current, required);
+}
+
 function buildFlowMaps(nodes, edges) {
   const incoming = {};
   const outgoing = {};

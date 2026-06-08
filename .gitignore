@@ -24,6 +24,7 @@ lerna-debug.log*
 dist/
 build/
 dist-ssr/
+coverage/
 .output/
 .vinxi/
 .tanstack/**
