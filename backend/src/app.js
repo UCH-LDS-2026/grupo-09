@@ -9,6 +9,21 @@ import { securityHeadersMiddleware } from "./middlewares/security-headers.middle
 import { healthRouter } from "./routes/health.routes.js";
 import { apiRouter } from "./routes/index.js";
 
+const allowedOrigins = env.cors.origin.split(",").map((origin) => origin.trim());
+
+function resolveCorsOrigin(origin, callback) {
+  if (!origin) {
+    callback(null, true);
+    return;
+  }
+
+  const isConfiguredOrigin = allowedOrigins.includes(origin);
+  const isLocalDevOrigin =
+    !env.isProduction && /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin);
+
+  callback(null, isConfiguredOrigin || isLocalDevOrigin);
+}
+
 export function createApp() {
   const app = express();
 
@@ -18,7 +33,7 @@ export function createApp() {
   app.use(securityHeadersMiddleware);
   app.use(
     cors({
-      origin: env.cors.origin,
+      origin: resolveCorsOrigin,
       credentials: true,
     }),
   );

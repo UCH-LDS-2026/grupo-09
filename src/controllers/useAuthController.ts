@@ -11,32 +11,38 @@ export function useAuthController() {
     setIsSubmitting(true);
     setError(null);
 
-    const result = await authService.login(credentials);
-    setIsSubmitting(false);
+    try {
+      const result = await authService.login(credentials);
 
-    if (!result.ok || !result.session) {
-      setError(result.error ?? "No se pudo iniciar sesión.");
-      return false;
+      if (!result.ok || !result.session) {
+        setError(result.error ?? "No se pudo iniciar sesión.");
+        return false;
+      }
+
+      setSession(result.session);
+      return true;
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setSession(result.session);
-    return true;
   };
 
   const register = async (credentials: RegisterCredentials) => {
     setIsSubmitting(true);
     setError(null);
 
-    const result = await authService.register(credentials);
-    setIsSubmitting(false);
+    try {
+      const result = await authService.register(credentials);
 
-    if (!result.ok || !result.session) {
-      setError(result.error ?? "No se pudo crear la cuenta.");
-      return false;
+      if (!result.ok || !result.session) {
+        setError(result.error ?? "No se pudo crear la cuenta.");
+        return false;
+      }
+
+      setSession(result.session);
+      return true;
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setSession(result.session);
-    return true;
   };
 
   const logout = () => {
