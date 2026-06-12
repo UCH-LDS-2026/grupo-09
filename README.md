@@ -1,10 +1,17 @@
 # Software Estrés — Grupo 9
 
-Breve guía del proyecto: diseño, simulación y análisis de arquitecturas distribuidas.
+Software Estrés es un simulador web para diseñar, guardar y probar arquitecturas distribuidas bajo carga. La idea del sistema es que un estudiante o docente pueda armar un flujo con API Gateway, balanceadores, servicios, bases de datos y colas, ejecutar tráfico simulado y ver rápidamente dónde aparecen saturación, errores, latencia, costo y cuellos de botella.
 
-Resumen
-- Aplicación web para diseñar arquitecturas (gateway, load balancer, servicios, DB, colas) y simular tráfico por ciclos.
-- Muestra métricas (throughput, latencia, error, costo, cuellos de botella) y sugiere escalado básico.
+Integrantes
+- Juan Ignacio Lozano
+- Gian Franco Siccardi
+- Santiago Rivamar
+
+Estado actual
+- MVP funcional con frontend, backend, MySQL y simulador compartido.
+- Login y registro conectados con la tabla `users`.
+- Persistencia de proyectos, nodos y conexiones en MySQL.
+- Tests cortos con Vitest para reglas unitarias y una integración del motor.
 
 Instalación rápida
 1. Instalar dependencias (raíz):
@@ -40,9 +47,11 @@ Variables de entorno
 - Copiar `backend/.env.example` → `backend/.env` y ajustar `DB_*`, `API_PORT`, `CORS_ORIGIN`.
 
 Qué es el MVP
+- Registro e inicio de sesión con email y contraseña.
 - Interfaz visual para armar diagramas con componentes.
 - Motor de simulación por ciclos que propaga tráfico y calcula métricas.
-- Persistencia de proyectos en MySQL y endpoint `POST /api/simulations/run`.
+- Persistencia de proyectos en MySQL.
+- Endpoint `POST /api/simulations/run` para ejecutar simulaciones desde backend.
 
 Arquitectura del repositorio
 - `src/` frontend (React + TypeScript + Vite)
@@ -69,9 +78,6 @@ npx vitest run tests/integracion.test.ts
 
 Estado y próximos pasos
 - MVP funcional: frontend, backend, persistencia de proyectos y simulador.
-- Pendientes principales: autenticación real, guardar histórico de corridas, más tests automatizados y mejoras de roles.
-
-Créditos
-- Grupo 9: Juan Ignacio Lozano, Gian Franco Siccardi, Santiago Rivamar
+- Pendientes principales: guardar histórico de corridas, ampliar roles, mejorar validaciones y sumar más cobertura si el alcance crece.
 
 Para más detalles ver `docs/` y `backend/.env.example`.

@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
-import { Activity, ArrowRight, Eye, EyeOff, Lock, Mail, ShieldCheck } from "lucide-react";
-import type { LoginCredentials } from "@/models/auth";
+import { Activity, ArrowRight, Eye, EyeOff, Lock, Mail, ShieldCheck, User } from "lucide-react";
+import type { LoginCredentials, RegisterCredentials } from "@/models/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,17 +9,28 @@ interface LoginViewProps {
   error: string | null;
   isSubmitting: boolean;
   onLogin: (credentials: LoginCredentials) => Promise<boolean>;
+  onRegister: (credentials: RegisterCredentials) => Promise<boolean>;
 }
 
-export function LoginView({ error, isSubmitting, onLogin }: LoginViewProps) {
+export function LoginView({ error, isSubmitting, onLogin, onRegister }: LoginViewProps) {
+  const [mode, setMode] = useState<"login" | "register">("login");
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
+    if (mode === "register") {
+      await onRegister({ name, email, password });
+      return;
+    }
+
     await onLogin({ email, password });
   };
+
+  const isRegistering = mode === "register";
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -83,13 +94,35 @@ export function LoginView({ error, isSubmitting, onLogin }: LoginViewProps) {
                 <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-md bg-[color:var(--neon-violet)]/15 ring-1 ring-[color:var(--neon-violet)]/40">
                   <ShieldCheck className="h-4 w-4 text-[color:var(--neon-violet)]" />
                 </div>
-                <h2 className="text-2xl font-semibold">Iniciar sesión</h2>
+                <h2 className="text-2xl font-semibold">
+                  {isRegistering ? "Crear cuenta" : "Iniciar sesión"}
+                </h2>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Ingresá con tu email y contraseña.
+                  {isRegistering
+                    ? "Registrate con datos mínimos y entrá al simulador."
+                    : "Ingresá con tu email y contraseña."}
                 </p>
               </div>
 
               <form className="space-y-4" onSubmit={handleSubmit}>
+                {isRegistering && (
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Nombre</Label>
+                    <div className="relative">
+                      <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        id="name"
+                        type="text"
+                        autoComplete="name"
+                        className="h-11 pl-10"
+                        value={name}
+                        onChange={(event) => setName(event.target.value)}
+                        required
+                      />
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
                   <div className="relative">
@@ -113,7 +146,8 @@ export function LoginView({ error, isSubmitting, onLogin }: LoginViewProps) {
                     <Input
                       id="password"
                       type={showPassword ? "text" : "password"}
-                      autoComplete="current-password"
+                      autoComplete={isRegistering ? "new-password" : "current-password"}
+                      minLength={6}
                       className="h-11 pl-10 pr-11"
                       value={password}
                       onChange={(event) => setPassword(event.target.value)}
@@ -141,10 +175,21 @@ export function LoginView({ error, isSubmitting, onLogin }: LoginViewProps) {
                   className="h-11 w-full bg-[color:var(--neon-cyan)]/15 text-[color:var(--neon-cyan)] ring-1 ring-[color:var(--neon-cyan)]/50 hover:bg-[color:var(--neon-cyan)]/25"
                   disabled={isSubmitting}
                 >
-                  {isSubmitting ? "Validando..." : "Entrar"}
+                  {isSubmitting ? "Validando..." : isRegistering ? "Registrarme" : "Entrar"}
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </form>
+
+              <div className="mt-5 border-t border-border/60 pt-4 text-center text-sm text-muted-foreground">
+                {isRegistering ? "¿Ya tenés cuenta?" : "¿No tenés cuenta?"}{" "}
+                <button
+                  type="button"
+                  className="font-medium text-[color:var(--neon-cyan)] hover:underline"
+                  onClick={() => setMode(isRegistering ? "login" : "register")}
+                >
+                  {isRegistering ? "Iniciar sesión" : "Crear cuenta"}
+                </button>
+              </div>
             </div>
           </div>
         </section>

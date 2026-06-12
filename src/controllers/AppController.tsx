@@ -6,7 +6,14 @@ export function AppController() {
   const auth = useAuthController();
 
   if (!auth.user) {
-    return <LoginView error={auth.error} isSubmitting={auth.isSubmitting} onLogin={auth.login} />;
+    return (
+      <LoginView
+        error={auth.error}
+        isSubmitting={auth.isSubmitting}
+        onLogin={auth.login}
+        onRegister={auth.register}
+      />
+    );
   }
 
   return <SimulatorView user={auth.user} onLogout={auth.logout} />;

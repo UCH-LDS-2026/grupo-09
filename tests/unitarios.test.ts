@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  calculateLatency,
-  calculateNodeCapacity,
-  statusFor,
-} from "../src/lib/simulator";
+import { calculateLatency, calculateNodeCapacity, statusFor } from "../src/lib/simulator";
 
 /**
  * TESTS UNITARIOS
