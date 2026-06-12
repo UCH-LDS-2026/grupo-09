@@ -41,7 +41,7 @@ En una computadora nueva:
 ```bash
 git clone git@github.com:UCH-LDS-2026/grupo-09.git
 cd grupo-09
-git switch juan
+git switch segundamain
 ```
 
 Si se descarga como ZIP desde GitHub, descomprimirlo y abrir una terminal dentro de la carpeta del proyecto.
