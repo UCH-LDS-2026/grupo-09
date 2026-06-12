@@ -34,6 +34,25 @@ function assertPassword(password) {
   }
 }
 
+export function validateRegistrationPayload(payload = {}) {
+  const name = normalizeName(payload.name);
+  const email = normalizeEmail(payload.email);
+  const password = String(payload.password ?? "");
+
+  if (!name) {
+    throw createHttpError(400, "Ingresá tu nombre.");
+  }
+
+  assertEmail(email);
+  assertPassword(password);
+
+  return {
+    name: name.slice(0, 120),
+    email,
+    password,
+  };
+}
+
 function hashPassword(password) {
   const salt = randomBytes(16).toString("hex");
   const hash = pbkdf2Sync(
@@ -87,26 +106,17 @@ function createSession(user) {
 export const authService = {
   async register(payload = {}) {
     const pool = getDatabasePool();
-    const name = normalizeName(payload.name);
-    const email = normalizeEmail(payload.email);
-    const password = String(payload.password ?? "");
-
-    if (!name) {
-      throw createHttpError(400, "Ingresá tu nombre.");
-    }
-
-    assertEmail(email);
-    assertPassword(password);
+    const { name, email, password } = validateRegistrationPayload(payload);
 
     try {
       const [result] = await pool.execute(
         "INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)",
-        [name.slice(0, 120), email, hashPassword(password), "architect"],
+        [name, email, hashPassword(password), "architect"],
       );
 
       return createSession({
         id: String(result.insertId),
-        name: name.slice(0, 120),
+        name,
         email,
         role: "architect",
       });

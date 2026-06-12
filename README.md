@@ -199,14 +199,22 @@ npm test
 
 Tests actuales:
 
-- `tests/unitarios.test.ts`: funciones pequeñas del simulador.
+- `tests/unitarios.test.ts`: funciones pequeñas del simulador y validación de email de registro.
 - `tests/simulator.test.ts`: reglas de negocio del simulador.
 - `tests/integracion.test.ts`: flujo completo gateway -> app -> database.
+
+Total actual: 10 tests.
 
 Ejecutar integración solamente:
 
 ```bash
 npx vitest run tests/integracion.test.ts
+```
+
+Ejecutar unitarios solamente:
+
+```bash
+npx vitest run tests/unitarios.test.ts
 ```
 
 ## Validaciones recomendadas

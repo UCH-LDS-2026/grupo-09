@@ -8,12 +8,12 @@ para comprobar que el test realmente detecta fallas.
 
 | Archivo | Tipo | Qué prueba |
 |---|---|---|
-| `tests/unitarios.test.ts` | 3 tests unitarios | Funciones aisladas del simulador: `calculateNodeCapacity`, `statusFor` y `calculateLatency`. |
+| `tests/unitarios.test.ts` | 4 tests unitarios | Funciones aisladas del simulador y validación de email de registro. |
 | `tests/integracion.test.ts` | 1 test de integración | El motor completo `simulate` (grafo + propagación por ciclos + métricas + cuello de botella). |
 | `vitest.config.ts` | Configuración | Permite que Vitest corra los tests sin cargar el plugin de Vite que daba error. |
 
 > Nota: ya existía `tests/simulator.test.ts` con otros 5 tests. En total el
-> proyecto corre **9 tests**.
+> proyecto corre **10 tests**.
 
 ## Diferencia entre test unitario y test de integración
 
@@ -61,7 +61,7 @@ Si todo está bien, la salida termina con algo parecido a esto:
 
 ```txt
  Test Files  3 passed (3)
-      Tests  9 passed (9)
+      Tests  10 passed (10)
 ```
 
 Cada archivo en verde y el código de salida es `0`. Eso significa que todas las
@@ -101,7 +101,28 @@ AssertionError: expected 1200 to be 9999
 Esto confirma que el test **realmente verifica** el cálculo: la función devuelve
 `1200` y el test esperaba `9999`, por eso falla.
 
-### Ejemplo B — romper el test de integración
+### Ejemplo B — romper el test unitario de email
+
+Abrí `backend/src/services/auth.service.js` y cambiá temporalmente esta condición:
+
+```js
+// Valor correcto:
+if (!email || !email.includes("@")) {
+
+// Valor incorrecto a propósito:
+if (!email) {
+```
+
+Con ese cambio, el sistema dejaría pasar emails sin arroba. Al correr `npm test`,
+debería fallar el test:
+
+```txt
+rechaza registrar una cuenta si el email no contiene arroba
+```
+
+Esto confirma que el test **realmente verifica** la validación del registro.
+
+### Ejemplo C — romper el test de integración
 
 Abrí `tests/integracion.test.ts` y cambiá el costo total esperado:
 
@@ -116,7 +137,7 @@ expect(result.totals.cost).toBe(0);
 Al correr `npm test` el test de integración fallará mostrando que el costo real
 calculado es `210` y no `0`.
 
-### Ejemplo C — romper el código fuente (falla en cadena)
+### Ejemplo D — romper el código fuente (falla en cadena)
 
 Si en lugar del test modificás la lógica real, fallan varios tests a la vez.
 Por ejemplo, en `shared/simulator-core.js`, en `calculateNodeCapacity`:

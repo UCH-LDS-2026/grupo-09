@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { validateRegistrationPayload } from "../backend/src/services/auth.service";
 import { calculateLatency, calculateNodeCapacity, statusFor } from "../src/lib/simulator";
 
 /**
@@ -65,5 +66,19 @@ describe("Tests unitarios del simulador", () => {
     expect(calculateLatency(baseLatency, 0.8)).toBe(30); // 20 * 1.5
     expect(calculateLatency(baseLatency, 1.0)).toBe(40); // 20 * 2
     expect(calculateLatency(baseLatency, 1.5)).toBe(60); // 20 * 3
+  });
+});
+
+describe("Tests unitarios de autenticacion", () => {
+  it("rechaza registrar una cuenta si el email no contiene arroba", () => {
+    // Arrange
+    const payload = {
+      name: "Usuario Demo",
+      email: "usuariosistema.test",
+      password: "demo1234",
+    };
+
+    // Act + Assert
+    expect(() => validateRegistrationPayload(payload)).toThrow("Ingresá un email válido.");
   });
 });
