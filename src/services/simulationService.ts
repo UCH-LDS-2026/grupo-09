@@ -1,4 +1,5 @@
 import type { SimEdge, SimNode, SimResult } from "@/lib/simulator";
+import { authService } from "@/services/authService";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001/api";
 
@@ -9,10 +10,12 @@ interface RunSimulationPayload {
 }
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = authService.getToken();
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...init?.headers,
     },
   });

@@ -11,7 +11,7 @@ import { SIMULATION_CYCLES, simulate, type SimNode, type SimEdge } from "../src/
  *   - el armado del grafo (nodos + conexiones),
  *   - la propagacion de trafico por ciclos,
  *   - el calculo de capacidad, carga, latencia, errores y costos,
- *   - la deteccion del cuello de botella (bottleneck).
+ *   - la deteccion del cuello de botella.
  *
  * Escenario: una arquitectura tipica
  *   Puerta de enlace API  ->  Servicio de aplicacion  ->  Base de datos
@@ -42,8 +42,8 @@ function makeNode(
 }
 
 describe("Test de integracion del motor de simulacion", () => {
-  it("simula un flujo completo gateway -> app -> database sin perdidas", () => {
-    // Arrange: construyo la arquitectura completa
+  it("simula un flujo completo puerta de enlace -> aplicacion -> base de datos sin perdidas", () => {
+    // Preparacion: construyo la arquitectura completa
     const nodes: SimNode[] = [
       makeNode("gateway", "api_gateway", 2, 800, 8, 25), // capacidad total 1600
       makeNode("app", "app_service", 2, 400, 35, 40), // capacidad total 800
@@ -55,10 +55,10 @@ describe("Test de integracion del motor de simulacion", () => {
     ];
     const trafficRps = 300;
 
-    // Act: ejecuto la simulacion completa
+    // Ejecucion: ejecuto la simulacion completa
     const result = simulate(nodes, edges, trafficRps);
 
-    // Assert: verifico el comportamiento integral del sistema
+    // Verificacion: confirmo el comportamiento integral del sistema
 
     // 1) La simulacion corre la cantidad de ciclos definida.
     expect(result.cycles).toHaveLength(SIMULATION_CYCLES);
@@ -68,7 +68,7 @@ describe("Test de integracion del motor de simulacion", () => {
     expect(result.totals.throughput).toBe(300);
 
     // 3) El costo total es la suma de costos de cada nodo:
-    //    gateway 25*2 + app 40*2 + db 80*1 = 50 + 80 + 80 = 210
+    //    puerta de enlace 25*2 + aplicacion 40*2 + base 80*1 = 50 + 80 + 80 = 210
     expect(result.totals.cost).toBe(210);
 
     // 4) Ningun nodo descarta trafico.

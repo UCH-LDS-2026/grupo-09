@@ -10,10 +10,10 @@ export const NODE_W = 208;
 export const NODE_H = 116;
 
 export const initialNodes: SimNode[] = [
-  { ...makeNode("api_gateway", 80, 220), id: "n_gw", name: "API Gateway" },
-  { ...makeNode("load_balancer", 320, 220), id: "n_lb", name: "Load Balancer" },
-  { ...makeNode("app_service", 580, 220), id: "n_app", name: "App Service" },
-  { ...makeNode("database", 840, 220), id: "n_db", name: "Database" },
+  { ...makeNode("api_gateway", 80, 220), id: "n_gw", name: "Puerta de enlace API" },
+  { ...makeNode("load_balancer", 320, 220), id: "n_lb", name: "Balanceador de carga" },
+  { ...makeNode("app_service", 580, 220), id: "n_app", name: "Servicio de aplicación" },
+  { ...makeNode("database", 840, 220), id: "n_db", name: "Base de datos" },
 ];
 
 export const initialEdges: SimEdge[] = [

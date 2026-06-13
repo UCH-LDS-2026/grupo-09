@@ -1,6 +1,7 @@
-import { pbkdf2Sync, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHmac, pbkdf2Sync, randomBytes, timingSafeEqual } from "node:crypto";
 
 import { getDatabasePool } from "../config/database.js";
+import { env } from "../config/env.js";
 
 const HASH_ALGORITHM = "sha256";
 const HASH_ITERATIONS = 100_000;
@@ -96,11 +97,45 @@ function mapUser(row) {
   };
 }
 
+function base64UrlEncode(value) {
+  return Buffer.from(value).toString("base64url");
+}
+
+function base64UrlDecode(value) {
+  return Buffer.from(value, "base64url").toString("utf8");
+}
+
+function sign(value) {
+  return createHmac("sha256", env.auth.sessionSecret).update(value).digest("base64url");
+}
+
 function createSession(user) {
+  const payload = base64UrlEncode(
+    JSON.stringify({
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+    }),
+  );
+
   return {
     user,
-    token: `db-user-${user.id}`,
+    token: `ses.${payload}.${sign(payload)}`,
   };
+}
+
+function parseToken(token) {
+  const [prefix, payload, signature] = String(token ?? "").split(".");
+
+  if (prefix !== "ses" || !payload || !signature || sign(payload) !== signature) {
+    throw createHttpError(401, "Sesión inválida o vencida.");
+  }
+
+  try {
+    return JSON.parse(base64UrlDecode(payload));
+  } catch {
+    throw createHttpError(401, "Sesión inválida o vencida.");
+  }
 }
 
 export const authService = {
@@ -148,5 +183,27 @@ export const authService = {
     }
 
     return createSession(mapUser(user));
+  },
+
+  async authenticateToken(token) {
+    const payload = parseToken(token);
+    const userId = Number(payload.sub);
+
+    if (!Number.isInteger(userId) || userId <= 0) {
+      throw createHttpError(401, "Sesión inválida o vencida.");
+    }
+
+    const pool = getDatabasePool();
+    const [rows] = await pool.execute(
+      "SELECT id, name, email, role FROM users WHERE id = ? LIMIT 1",
+      [userId],
+    );
+    const user = rows[0];
+
+    if (!user) {
+      throw createHttpError(401, "Sesión inválida o vencida.");
+    }
+
+    return mapUser(user);
   },
 };

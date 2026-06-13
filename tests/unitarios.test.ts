@@ -8,10 +8,10 @@ import { calculateLatency, calculateNodeCapacity, statusFor } from "../src/lib/s
  * Un test unitario prueba UNA sola funcion de forma aislada, sin depender
  * de otras partes del sistema (ni base de datos, ni backend, ni el motor completo).
  *
- * Cada test sigue el patron Arrange / Act / Assert:
- *   - Arrange: preparo los datos de entrada.
- *   - Act:     ejecuto la funcion que quiero probar.
- *   - Assert:  verifico que el resultado sea el esperado.
+ * Cada test sigue el patron Preparacion / Ejecucion / Verificacion:
+ *   - Preparacion: preparo los datos de entrada.
+ *   - Ejecucion:   ejecuto la funcion que quiero probar.
+ *   - Verificacion: confirmo que el resultado sea el esperado.
  */
 describe("Tests unitarios del simulador", () => {
   // -------------------------------------------------------------------------
@@ -19,14 +19,14 @@ describe("Tests unitarios del simulador", () => {
   // La capacidad total de un nodo = instancias * capacidad por instancia.
   // -------------------------------------------------------------------------
   it("calcula la capacidad total de un nodo (instancias * capacidad)", () => {
-    // Arrange
+    // Preparacion
     const instances = 3;
     const capacityPerInstance = 400;
 
-    // Act
+    // Ejecucion
     const capacity = calculateNodeCapacity(instances, capacityPerInstance);
 
-    // Assert
+    // Verificacion
     expect(capacity).toBe(1200);
   });
 
@@ -40,7 +40,7 @@ describe("Tests unitarios del simulador", () => {
   //   errorRate > 0         -> "error" (tiene prioridad)
   // -------------------------------------------------------------------------
   it("devuelve el estado correcto segun la carga del nodo", () => {
-    // Arrange + Act + Assert
+    // Preparacion + ejecucion + verificacion
     expect(statusFor(0.5, 0)).toBe("healthy");
     expect(statusFor(0.75, 0)).toBe("warning");
     expect(statusFor(0.95, 0)).toBe("high_load");
@@ -58,10 +58,10 @@ describe("Tests unitarios del simulador", () => {
   //   load > 1.0   -> base * 3
   // -------------------------------------------------------------------------
   it("aumenta la latencia a medida que sube la carga", () => {
-    // Arrange
+    // Preparacion
     const baseLatency = 20;
 
-    // Act + Assert
+    // Ejecucion + verificacion
     expect(calculateLatency(baseLatency, 0.5)).toBe(20); // sin penalizacion
     expect(calculateLatency(baseLatency, 0.8)).toBe(30); // 20 * 1.5
     expect(calculateLatency(baseLatency, 1.0)).toBe(40); // 20 * 2
@@ -71,14 +71,14 @@ describe("Tests unitarios del simulador", () => {
 
 describe("Tests unitarios de autenticacion", () => {
   it("rechaza registrar una cuenta si el email no contiene arroba", () => {
-    // Arrange
+    // Preparacion
     const payload = {
       name: "Usuario Demo",
       email: "usuariosistema.test",
       password: "demo1234",
     };
 
-    // Act + Assert
+    // Ejecucion + verificacion
     expect(() => validateRegistrationPayload(payload)).toThrow("Ingresá un email válido.");
   });
 });

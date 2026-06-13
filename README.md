@@ -1,6 +1,6 @@
 # Software Estrés - Grupo 9
 
-Software Estrés es una aplicación web para diseñar, guardar y simular arquitecturas distribuidas bajo carga. El usuario arma un flujo con API Gateway, balanceadores, servicios, bases de datos y colas; luego ejecuta una simulación para ver throughput, latencia, error, costo mensual y cuellos de botella.
+Software Estrés es una aplicación web para diseñar, guardar y simular arquitecturas distribuidas bajo carga. El usuario arma un flujo con puerta de enlace API, balanceadores, servicios, bases de datos y colas; la simulación queda siempre activa para ver salida procesada, latencia, error, costo mensual y cuellos de botella.
 
 ## Integrantes
 
@@ -14,9 +14,11 @@ Software Estrés es una aplicación web para diseñar, guardar y simular arquite
 - Backend Node.js + Express.
 - Base de datos MySQL.
 - Registro e inicio de sesión conectados a la tabla `users`.
+- Sesión persistida en el navegador y endpoints privados protegidos con `Authorization: Bearer`.
 - Persistencia de proyectos, nodos y conexiones.
 - Motor de simulación compartido entre frontend y backend.
 - Tests automatizados cortos con Vitest.
+- Guía completa de exposición en `DEFENSA.md`.
 
 ## Requisitos
 
@@ -72,6 +74,23 @@ mysql -u root -p < database/schema.sql
 
 El script crea la base `softwareestres`, las tablas principales y datos iniciales de catálogo.
 
+`database/seed-demo.sql` no crea la estructura de la base. Es un script opcional de demostración que se ejecuta después de `schema.sql` para cargar un usuario y proyectos listos para exponer.
+
+Para cargar esos datos de exposición:
+
+```bash
+mysql -u root -p softwareestres < database/seed-demo.sql
+```
+
+Usuario demo:
+
+```txt
+Email: demo@softwareestres.test
+Contraseña: demo1234
+```
+
+El seed crea tres proyectos: `Demo estable`, `Demo falla por exceso` y `Demo cuello de botella API`. Conviene ejecutarlo antes de la defensa para no depender de armar todos los escenarios en vivo.
+
 Tablas principales:
 
 - `users`: usuarios registrados.
@@ -80,11 +99,20 @@ Tablas principales:
 - `component_types`: tipos de componentes disponibles.
 - `projects_nodes`: nodos del diagrama.
 - `projects_edges`: conexiones entre nodos.
-- `objective_types`: tipos de objetivos.
-- `project_objectives`: objetivos por proyecto.
-- `simulation_runs`: corridas de simulación.
-- `simulation_node_metrics`: métricas por nodo.
-- `scaling_recommendations`: recomendaciones de escalado.
+
+Tablas eliminadas del MVP:
+
+- `objective_types`
+- `project_objectives`
+- `simulation_runs`
+- `simulation_node_metrics`
+- `scaling_recommendations`
+
+No las usa el backend ni el frontend actual. Si una base vieja ya las tiene, se pueden eliminar con:
+
+```bash
+mysql -u root -p softwareestres < database/migrations/003-drop-unused-mvp-tables.sql
+```
 
 ## Configurar variables del backend
 
@@ -94,7 +122,7 @@ Copiar el ejemplo:
 cp backend/.env.example backend/.env
 ```
 
-Editar `backend/.env` con los datos locales:
+Editar `backend/.env` con los datos locales. Este archivo no debe subirse a GitHub:
 
 ```txt
 NODE_ENV=development
@@ -105,9 +133,18 @@ DB_PORT=3306
 DB_NAME=softwareestres
 DB_USER=root
 DB_PASSWORD=tu_contraseña
+SESSION_SECRET=reemplazar_por_un_valor_largo_y_privado
 ```
 
 En desarrollo el backend acepta puertos locales de Vite como `8080`, `8081` o similares.
+
+Notas de seguridad:
+
+- `backend/.env` queda ignorado por Git.
+- `backend/.env.example` sí se versiona porque no contiene secretos reales.
+- No subir contraseñas, tokens, URLs privadas ni claves reales.
+- Cambiar `SESSION_SECRET` por un valor largo y privado en cada entorno.
+- Antes de subir, revisar con `git status --short` que no aparezcan archivos `.env`.
 
 ## Levantar el sistema
 
@@ -150,7 +187,7 @@ http://localhost:8081/
 4. Al registrarse correctamente, el sistema entra al simulador.
 5. Agregar o mover componentes en el canvas.
 6. Configurar propiedades del componente seleccionado.
-7. Ejecutar simulación para ver métricas.
+7. Subir o bajar el tráfico entrante para ver métricas en tiempo real.
 8. Guardar el proyecto para persistirlo en MySQL.
 9. Cerrar sesión para volver al acceso.
 
@@ -189,6 +226,12 @@ Simulación:
 POST http://localhost:3001/api/simulations/run
 ```
 
+Los endpoints de proyectos y simulación requieren header:
+
+```txt
+Authorization: Bearer <token_devuelto_por_login_o_register>
+```
+
 ## Tests
 
 Ejecutar todos:
@@ -201,7 +244,7 @@ Tests actuales:
 
 - `tests/unitarios.test.ts`: funciones pequeñas del simulador y validación de email de registro.
 - `tests/simulator.test.ts`: reglas de negocio del simulador.
-- `tests/integracion.test.ts`: flujo completo gateway -> app -> database.
+- `tests/integracion.test.ts`: flujo completo puerta de enlace -> aplicación -> base de datos.
 
 Total actual: 10 tests.
 
@@ -250,6 +293,12 @@ curl -X POST http://localhost:3001/api/auth/login \
   -d '{"email":"usuario@sistema.test","password":"demo1234"}'
 ```
 
+Probar endpoint protegido sin token debe devolver `401`:
+
+```bash
+curl -i http://localhost:3001/api/projects
+```
+
 ## Problemas comunes
 
 Si el frontend queda en `Validando...`, revisar que el backend esté iniciado en `http://localhost:3001`.
@@ -271,7 +320,7 @@ Si el email ya fue registrado, usar `Iniciar sesión` o registrar otro email.
 - `database/`: schema SQL y migraciones.
 - `shared/`: motor y reglas compartidas.
 - `tests/`: pruebas automatizadas.
-- `docs/`: documentación complementaria.
+- `DEFENSA.md`: explicación completa para presentar el TP5.
 
 ## Próximos pasos
 

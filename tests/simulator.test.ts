@@ -22,21 +22,21 @@ function makeTestNode(id: string, kind: SimNode["kind"]): SimNode {
   };
 }
 
-describe("simulator business rules", () => {
+describe("Reglas de negocio del simulador", () => {
   it("calcula capacidad, carga, salida y error en un escenario normal", () => {
-    // Arrange
+    // Preparación
     const trafficRps = 600;
     const instances = 2;
     const capacityPerInstance = 400;
 
-    // Act
+    // Ejecución
     const metrics = calculateNodeTrafficMetrics({
       trafficRps,
       instances,
       capacityPerInstance,
     });
 
-    // Assert
+    // Verificación
     expect(metrics.capacity).toBe(800);
     expect(metrics.load).toBe(0.75);
     expect(metrics.throughput).toBe(600);
@@ -44,19 +44,19 @@ describe("simulator business rules", () => {
   });
 
   it("calcula perdida de trafico, error y estado cuando el nodo se satura", () => {
-    // Arrange
+    // Preparación
     const trafficRps = 1000;
     const instances = 2;
     const capacityPerInstance = 400;
 
-    // Act
+    // Ejecución
     const metrics = calculateNodeTrafficMetrics({
       trafficRps,
       instances,
       capacityPerInstance,
     });
 
-    // Assert
+    // Verificación
     expect(metrics.capacity).toBe(800);
     expect(metrics.throughput).toBe(800);
     expect(metrics.dropped).toBe(200);
@@ -65,43 +65,43 @@ describe("simulator business rules", () => {
   });
 
   it("recomienda la cantidad minima de instancias para absorber el trafico", () => {
-    // Arrange
+    // Preparación
     const trafficRps = 1200;
     const capacityPerInstance = 400;
     const currentInstances = 2;
 
-    // Act
+    // Ejecución
     const recommendedInstances = recommendInstancesForTraffic(
       trafficRps,
       capacityPerInstance,
       currentInstances,
     );
 
-    // Assert
+    // Verificación
     expect(recommendedInstances).toBe(3);
   });
 
-  it("permite conectar API Gateway hacia Load Balancer", () => {
-    // Arrange
+  it("permite conectar puerta de enlace API hacia balanceador de carga", () => {
+    // Preparación
     const source = makeTestNode("gateway", "api_gateway");
     const target = makeTestNode("balancer", "load_balancer");
 
-    // Act
+    // Ejecución
     const result = validateConnection(source, target, []);
 
-    // Assert
+    // Verificación
     expect(result.valid).toBe(true);
   });
 
-  it("rechaza conectar Database hacia API Gateway", () => {
-    // Arrange
+  it("rechaza conectar base de datos hacia puerta de enlace API", () => {
+    // Preparación
     const source = makeTestNode("database", "database");
     const target = makeTestNode("gateway", "api_gateway");
 
-    // Act
+    // Ejecución
     const result = validateConnection(source, target, []);
 
-    // Assert
+    // Verificación
     expect(result.valid).toBe(false);
   });
 });

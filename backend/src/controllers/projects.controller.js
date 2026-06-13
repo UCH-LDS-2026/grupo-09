@@ -15,7 +15,7 @@ function parseProjectId(rawId) {
 export const projectsController = {
   async list(request, response, next) {
     try {
-      const projects = await projectsService.listProjects(request.query.userEmail);
+      const projects = await projectsService.listProjects(request.user.email);
       response.status(200).json({ projects });
     } catch (error) {
       next(error);
@@ -26,7 +26,7 @@ export const projectsController = {
     try {
       const project = await projectsService.getProject(
         parseProjectId(request.params.id),
-        request.query.userEmail,
+        request.user.email,
       );
       response.status(200).json({ project });
     } catch (error) {
@@ -36,7 +36,7 @@ export const projectsController = {
 
   async create(request, response, next) {
     try {
-      const project = await projectsService.saveProject(request.body);
+      const project = await projectsService.saveProject(request.body, request.user);
       response.status(201).json({ project });
     } catch (error) {
       next(error);
@@ -45,10 +45,13 @@ export const projectsController = {
 
   async update(request, response, next) {
     try {
-      const project = await projectsService.saveProject({
-        ...request.body,
-        id: parseProjectId(request.params.id),
-      });
+      const project = await projectsService.saveProject(
+        {
+          ...request.body,
+          id: parseProjectId(request.params.id),
+        },
+        request.user,
+      );
       response.status(200).json({ project });
     } catch (error) {
       next(error);
@@ -57,10 +60,7 @@ export const projectsController = {
 
   async delete(request, response, next) {
     try {
-      await projectsService.deleteProject(
-        parseProjectId(request.params.id),
-        request.query.userEmail,
-      );
+      await projectsService.deleteProject(parseProjectId(request.params.id), request.user.email);
       response.status(200).json({ deleted: true });
     } catch (error) {
       next(error);

@@ -11,22 +11,12 @@ export function buildSystemConclusion(
   nodes: SimNode[],
   result: SimResult,
   traffic: number,
-  running: boolean,
 ): SystemConclusionData {
   if (!nodes.length) {
     return {
       title: "Conclusión del sistema",
       summary: "Agregá componentes y conexiones para evaluar la arquitectura.",
       details: ["El sistema todavía no tiene una topología mínima para simular."],
-      accent: "amber",
-    };
-  }
-
-  if (!running) {
-    return {
-      title: "Simulación detenida",
-      summary: "El sistema está sin evaluar hasta ejecutar la simulación.",
-      details: ["La conclusión se calcula con la simulación activa y el tráfico configurado."],
       accent: "amber",
     };
   }

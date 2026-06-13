@@ -22,6 +22,10 @@ export const env = {
   cors: {
     origin: process.env.CORS_ORIGIN ?? "http://localhost:8080",
   },
+  auth: {
+    sessionSecret:
+      process.env.SESSION_SECRET ?? "softwareestres-dev-session-secret-change-in-production",
+  },
   db: {
     host: process.env.DB_HOST ?? "127.0.0.1",
     port: toNumber(process.env.DB_PORT, 3306),

@@ -4,6 +4,9 @@ node_modules
 
 # Variables de entorno
 .env
+.env.*
+!.env.example
+!backend/.env.example
 *.local
 .dev.vars
 
@@ -29,6 +32,7 @@ coverage/
 .vinxi/
 .tanstack/**
 .nitro/
+.cache/
 
 # Wrangler / Cloudflare
 .wrangler/

@@ -1,5 +1,6 @@
 import type { AuthUser } from "@/models/auth";
 import type { SimEdge, SimNode } from "@/lib/simulator";
+import { authService } from "@/services/authService";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001/api";
 
@@ -30,10 +31,12 @@ interface SaveProjectPayload {
 }
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = authService.getToken();
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...init?.headers,
     },
   });
@@ -48,15 +51,13 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const projectService = {
-  async list(userEmail: string): Promise<ProjectSummary[]> {
-    const params = new URLSearchParams({ userEmail });
-    const data = await requestJson<{ projects: ProjectSummary[] }>(`/projects?${params}`);
+  async list(): Promise<ProjectSummary[]> {
+    const data = await requestJson<{ projects: ProjectSummary[] }>("/projects");
     return data.projects;
   },
 
-  async get(id: number, userEmail: string): Promise<SavedProject> {
-    const params = new URLSearchParams({ userEmail });
-    const data = await requestJson<{ project: SavedProject }>(`/projects/${id}?${params}`);
+  async get(id: number): Promise<SavedProject> {
+    const data = await requestJson<{ project: SavedProject }>(`/projects/${id}`);
     return data.project;
   },
 
@@ -71,9 +72,8 @@ export const projectService = {
     return data.project;
   },
 
-  async remove(id: number, userEmail: string): Promise<void> {
-    const params = new URLSearchParams({ userEmail });
-    await requestJson<{ deleted: true }>(`/projects/${id}?${params}`, {
+  async remove(id: number): Promise<void> {
+    await requestJson<{ deleted: true }>(`/projects/${id}`, {
       method: "DELETE",
     });
   },

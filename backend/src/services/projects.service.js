@@ -36,7 +36,7 @@ function normalizeUser(user = {}) {
   return { email, name, role };
 }
 
-function normalizeProjectPayload(payload = {}) {
+function normalizeProjectPayload(payload = {}, authenticatedUser) {
   const name = String(payload.name ?? "Proyecto sin nombre").trim() || "Proyecto sin nombre";
   const traffic = Math.max(0, Math.round(Number(payload.traffic ?? 600)));
   const running = Boolean(payload.running ?? true);
@@ -51,7 +51,7 @@ function normalizeProjectPayload(payload = {}) {
 
   return {
     id: payload.id ? Number(payload.id) : null,
-    user: normalizeUser(payload.user),
+    user: normalizeUser(authenticatedUser ?? payload.user),
     name: name.slice(0, 160),
     description: payload.description ? String(payload.description) : null,
     traffic,
@@ -340,8 +340,8 @@ export const projectsService = {
     };
   },
 
-  async saveProject(rawPayload) {
-    const payload = normalizeProjectPayload(rawPayload);
+  async saveProject(rawPayload, authenticatedUser) {
+    const payload = normalizeProjectPayload(rawPayload, authenticatedUser);
     const pool = getDatabasePool();
     const connection = await pool.getConnection();
 

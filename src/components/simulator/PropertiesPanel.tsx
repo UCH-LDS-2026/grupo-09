@@ -16,6 +16,7 @@ interface PropertiesPanelProps {
   onChange: (patch: Partial<SimNode>) => void;
   onDelete: () => void;
   metrics?: NodeMetrics;
+  readOnly?: boolean;
 }
 
 type NumericNodeField =
@@ -26,7 +27,13 @@ type NumericNodeField =
   | "timeout"
   | "costPerInstance";
 
-export function PropertiesPanel({ node, onChange, onDelete, metrics }: PropertiesPanelProps) {
+export function PropertiesPanel({
+  node,
+  onChange,
+  onDelete,
+  metrics,
+  readOnly = false,
+}: PropertiesPanelProps) {
   const meta = KIND_META[node.kind];
   const Icon = NODE_ICON[node.kind];
   const status = metrics?.status ?? "healthy";
@@ -70,6 +77,7 @@ export function PropertiesPanel({ node, onChange, onDelete, metrics }: Propertie
         <Field label="Nombre">
           <Input
             value={node.name}
+            readOnly={readOnly}
             onChange={(event) => onChange({ name: event.target.value })}
             onBlur={() => {
               const name = node.name.trim();
@@ -83,6 +91,7 @@ export function PropertiesPanel({ node, onChange, onDelete, metrics }: Propertie
           min={1}
           max={16}
           step={1}
+          disabled={readOnly}
           onChange={(value) => updateNumber("instances", Math.round(value), 1)}
           unit="×"
         />
@@ -92,6 +101,7 @@ export function PropertiesPanel({ node, onChange, onDelete, metrics }: Propertie
           min={1}
           max={10000}
           step={1}
+          disabled={readOnly}
           onChange={(value) => updateNumber("capacity", Math.round(value), 1)}
         />
         <SliderField
@@ -100,6 +110,7 @@ export function PropertiesPanel({ node, onChange, onDelete, metrics }: Propertie
           min={0}
           max={300}
           step={1}
+          disabled={readOnly}
           onChange={(value) => updateNumber("baseLatency", Math.round(value), 0)}
           unit="ms"
         />
@@ -109,6 +120,7 @@ export function PropertiesPanel({ node, onChange, onDelete, metrics }: Propertie
           min={0}
           max={5000}
           step={10}
+          disabled={readOnly}
           onChange={(value) => updateNumber("queueSize", Math.round(value), 0)}
           unit="r/s"
         />
@@ -118,6 +130,7 @@ export function PropertiesPanel({ node, onChange, onDelete, metrics }: Propertie
           min={0}
           max={15000}
           step={100}
+          disabled={readOnly}
           onChange={(value) => updateNumber("timeout", Math.round(value), 0)}
           unit="ms"
         />
@@ -127,6 +140,7 @@ export function PropertiesPanel({ node, onChange, onDelete, metrics }: Propertie
             min={0}
             step={1}
             value={node.costPerInstance}
+            readOnly={readOnly}
             onChange={(event) => updateNumber("costPerInstance", Number(event.target.value), 0)}
           />
         </Field>
@@ -156,6 +170,7 @@ export function PropertiesPanel({ node, onChange, onDelete, metrics }: Propertie
         type="button"
         variant="outline"
         className="w-full border-[color:var(--status-saturated)]/45 bg-[color:var(--status-saturated)]/5 text-[color:var(--status-saturated)] hover:bg-[color:var(--status-saturated)]/10 hover:text-[color:var(--status-saturated)]"
+        disabled={readOnly}
         onClick={onDelete}
       >
         <Trash2 className="h-4 w-4" />
@@ -195,9 +210,10 @@ interface SliderFieldProps {
   max: number;
   step: number;
   unit?: string;
+  disabled?: boolean;
 }
 
-function SliderField({ label, value, onChange, min, max, step, unit }: SliderFieldProps) {
+function SliderField({ label, value, onChange, min, max, step, unit, disabled }: SliderFieldProps) {
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
@@ -215,6 +231,7 @@ function SliderField({ label, value, onChange, min, max, step, unit }: SliderFie
         min={min}
         max={max}
         step={step}
+        disabled={disabled}
       />
     </div>
   );

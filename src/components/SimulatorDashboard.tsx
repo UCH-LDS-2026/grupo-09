@@ -15,8 +15,6 @@ import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import {
-  Play,
-  Square,
   Save,
   Activity,
   AlertTriangle,
@@ -32,6 +30,7 @@ import {
   Copy,
   Eraser,
   LogOut,
+  Eye,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AuthUser } from "@/models/auth";
@@ -69,7 +68,6 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
   const [edges, setEdges] = useState<SimEdge[]>(initialEdges);
   const [selectedId, setSelectedId] = useState<string | null>("n_app");
   const [traffic, setTraffic] = useState(600);
-  const [running, setRunning] = useState(true);
   const [projectId, setProjectId] = useState<number | null>(null);
   const [projectName, setProjectName] = useState("plataforma-checkout.v1");
   const [connectingFromId, setConnectingFromId] = useState<string | null>(null);
@@ -88,6 +86,9 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
   const pendingDragRef = useRef<{ id: string; x: number; y: number } | null>(null);
   const dragFrameRef = useRef<number | null>(null);
   const resizeRef = useRef<{ side: "left" | "right"; startX: number; startW: number } | null>(null);
+  const canEdit = user?.role !== "viewer";
+  const roleLabel =
+    user?.role === "viewer" ? "Lector" : user?.role === "admin" ? "Admin" : "Arquitecto";
 
   useEffect(() => {
     return () => {
@@ -139,15 +140,12 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
     document.body.style.userSelect = "none";
   };
 
-  const localResult = useMemo(
-    () => simulate(nodes, edges, running ? traffic : 0),
-    [nodes, edges, traffic, running],
-  );
+  const localResult = useMemo(() => simulate(nodes, edges, traffic), [nodes, edges, traffic]);
   const result = backendResult ?? localResult;
   const selected = nodes.find((n) => n.id === selectedId) ?? null;
   const conclusion = useMemo(
-    () => buildSystemConclusion(nodes, result, traffic, running),
-    [nodes, result, traffic, running],
+    () => buildSystemConclusion(nodes, result, traffic),
+    [nodes, result, traffic],
   );
 
   const refreshProjects = useCallback(async () => {
@@ -155,7 +153,7 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
 
     setIsLoadingProjects(true);
     try {
-      const savedProjects = await projectService.list(user.email);
+      const savedProjects = await projectService.list();
       setProjects(savedProjects);
     } catch (error) {
       setPersistenceError(
@@ -179,7 +177,7 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
           {
             nodes,
             edges,
-            traffic: running ? traffic : 0,
+            traffic,
           },
           controller.signal,
         )
@@ -196,11 +194,13 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
       window.clearTimeout(timeoutId);
       controller.abort();
     };
-  }, [nodes, edges, traffic, running]);
+  }, [nodes, edges, traffic]);
 
   // ---------- Drag nodes on canvas ----------
   const onNodeMouseDown = (e: React.MouseEvent, n: SimNode) => {
     setSelectedId(n.id);
+
+    if (!canEdit) return;
 
     if (connectingFromId) {
       e.preventDefault();
@@ -250,11 +250,18 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
 
   // ---------- Library drag & drop (HTML5) ----------
   const onLibDragStart = (e: React.DragEvent, kind: NodeKind) => {
+    if (!canEdit) {
+      e.preventDefault();
+      return;
+    }
+
     e.dataTransfer.setData("application/x-node-kind", kind);
     e.dataTransfer.effectAllowed = "copy";
   };
 
   const addNodeToCanvas = (kind: NodeKind, position?: { x: number; y: number }) => {
+    if (!canEdit) return;
+
     const idx = nodes.filter((n) => n.kind === kind).length + 1;
     const fallbackOffset = Math.min(idx - 1, 5) * 28;
     const node = {
@@ -272,6 +279,8 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
 
   const onCanvasDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    if (!canEdit) return;
+
     const kind = e.dataTransfer.getData("application/x-node-kind") as NodeKind;
     if (!kind || !KIND_META[kind]) return;
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -282,11 +291,13 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
   };
 
   const updateSelected = (patch: Partial<SimNode>) => {
-    if (!selected) return;
+    if (!selected || !canEdit) return;
     setNodes((prev) => prev.map((n) => (n.id === selected.id ? { ...n, ...patch } : n)));
   };
 
   const connectNodes = (fromId: string, toId: string) => {
+    if (!canEdit) return;
+
     const fromNode = nodes.find((node) => node.id === fromId);
     const toNode = nodes.find((node) => node.id === toId);
 
@@ -326,11 +337,10 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
         return;
       }
 
-      const project = await projectService.get(id, user.email);
+      const project = await projectService.get(id);
       setProjectId(project.id);
       setProjectName(project.name);
       setTraffic(project.incomingTrafficRps);
-      setRunning(project.isRunning);
       setNodes(project.nodes);
       setEdges(project.edges);
       setSelectedId(project.nodes[0]?.id ?? null);
@@ -344,12 +354,16 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
   };
 
   const startNewProject = () => {
+    if (!canEdit) {
+      setPersistenceError("El rol lector solo puede ver proyectos guardados.");
+      return;
+    }
+
     setProjectId(null);
     setProjectName("nuevo-proyecto");
     setNodes([]);
     setEdges([]);
     setTraffic(600);
-    setRunning(true);
     setSelectedId(null);
     setConnectingFromId(null);
     setPersistenceMessage("Nuevo proyecto listo.");
@@ -358,6 +372,11 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
   };
 
   const saveProject = async () => {
+    if (!canEdit) {
+      setPersistenceError("El rol lector no puede guardar cambios.");
+      return;
+    }
+
     if (!user) {
       setPersistenceError("Iniciá sesión para guardar proyectos.");
       return;
@@ -385,7 +404,7 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
         user,
         name: normalizedProjectName,
         traffic,
-        running,
+        running: true,
         nodes,
         edges,
       });
@@ -404,6 +423,11 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
   };
 
   const deleteCurrentProject = async () => {
+    if (!canEdit) {
+      setPersistenceError("El rol lector no puede borrar proyectos.");
+      return;
+    }
+
     if (!user?.email || !projectId) return;
 
     setIsSaving(true);
@@ -411,14 +435,13 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
     setPersistenceMessage(null);
 
     try {
-      await projectService.remove(projectId, user.email);
+      await projectService.remove(projectId);
       setProjectId(null);
       setProjectName("nuevo-proyecto");
       setNodes([]);
       setEdges([]);
       setSelectedId(null);
       setConnectingFromId(null);
-      setRunning(false);
       setPersistenceMessage("Proyecto eliminado.");
       await refreshProjects();
     } catch (error) {
@@ -431,6 +454,11 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
   };
 
   const duplicateProject = () => {
+    if (!canEdit) {
+      setPersistenceError("El rol lector no puede duplicar proyectos.");
+      return;
+    }
+
     setProjectId(null);
     setProjectName(`${projectName.trim() || "proyecto"}-copia`);
     setConnectingFromId(null);
@@ -439,6 +467,11 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
   };
 
   const clearCanvas = () => {
+    if (!canEdit) {
+      setPersistenceError("El rol lector no puede limpiar el canvas.");
+      return;
+    }
+
     setNodes([]);
     setEdges([]);
     setSelectedId(null);
@@ -449,7 +482,7 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
   };
 
   const deleteSelected = () => {
-    if (!selected) return;
+    if (!selected || !canEdit) return;
     const selectedNodeId = selected.id;
 
     setNodes((prev) => prev.filter((n) => n.id !== selectedNodeId));
@@ -462,28 +495,43 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground lg:h-screen">
       {/* ---------- Barra superior ---------- */}
-      <header className="flex shrink-0 flex-col gap-3 border-b border-border/60 bg-panel/75 px-3 py-3 backdrop-blur lg:h-14 lg:flex-row lg:items-center lg:justify-between lg:px-4 lg:py-0">
-        <div className="flex min-w-0 items-center gap-3">
+      <header className="flex shrink-0 flex-col gap-3 border-b border-border/60 bg-panel/75 px-3 py-3 backdrop-blur lg:min-h-14 lg:flex-row lg:items-center lg:justify-between lg:px-4">
+        <div className="flex min-w-0 items-center gap-3 lg:flex-1">
           <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[color:var(--neon-cyan)]/15 ring-1 ring-[color:var(--neon-cyan)]/40">
             <Activity className="h-4 w-4 text-[color:var(--neon-cyan)]" />
           </div>
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold tracking-tight">Simulador</div>
-            <div className="mt-1 flex min-w-0 items-center gap-2 font-mono text-[11px] text-muted-foreground sm:mt-0.5">
+            <div className="mt-1 flex min-w-0 flex-col gap-1.5 font-mono text-[11px] text-muted-foreground sm:mt-0.5 sm:flex-row sm:items-center sm:gap-2">
               <span className="shrink-0">Proyecto actual:</span>
               <Input
                 value={projectName}
                 onChange={(event) => setProjectName(event.target.value)}
-                className="h-7 min-w-0 flex-1 border-border/50 bg-card/50 px-2 font-mono text-[11px] sm:w-56 sm:flex-none"
+                readOnly={!canEdit}
+                className="h-7 min-w-0 border-border/50 bg-card/50 px-2 font-mono text-[11px] sm:w-56"
               />
             </div>
           </div>
         </div>
 
-        <div className="flex min-w-0 items-center gap-2 overflow-x-auto pb-1 lg:overflow-visible lg:pb-0">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
           {user?.email && (
             <span className="hidden max-w-44 shrink-0 truncate font-mono text-[11px] text-muted-foreground sm:block">
               {user.email}
+            </span>
+          )}
+          {user && (
+            <span
+              className={cn(
+                "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border px-2 font-mono text-[11px]",
+                canEdit
+                  ? "border-[color:var(--neon-cyan)]/40 text-[color:var(--neon-cyan)]"
+                  : "border-[color:var(--neon-amber)]/45 text-[color:var(--neon-amber)]",
+              )}
+              title={canEdit ? "Puede editar proyectos" : "Solo lectura"}
+            >
+              {!canEdit && <Eye className="h-3.5 w-3.5" />}
+              {roleLabel}
             </span>
           )}
           <select
@@ -493,7 +541,7 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
               if (nextProjectId) void loadProject(nextProjectId);
             }}
             disabled={isLoadingProjects || !projects.length}
-            className="h-8 max-w-48 shrink-0 rounded-md border border-border/60 bg-card/70 px-2 font-mono text-[11px] text-foreground outline-none transition hover:border-[color:var(--neon-cyan)]/50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="h-8 min-w-0 max-w-full shrink rounded-md border border-border/60 bg-card/70 px-2 font-mono text-[11px] text-foreground outline-none transition hover:border-[color:var(--neon-cyan)]/50 disabled:cursor-not-allowed disabled:opacity-50 sm:max-w-48"
             title="Cargar proyecto guardado"
           >
             <option value="">Proyectos guardados</option>
@@ -503,31 +551,22 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
               </option>
             ))}
           </select>
-          <Button size="sm" variant="ghost" onClick={startNewProject} className="shrink-0">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={startNewProject}
+            disabled={!canEdit}
+            className="shrink-0"
+          >
             <FilePlus2 className="mr-1.5 h-3.5 w-3.5" /> Nuevo
           </Button>
           <Button
             size="sm"
             onClick={saveProject}
-            disabled={isSaving}
+            disabled={isSaving || !canEdit}
             className="shrink-0 bg-[color:var(--neon-cyan)]/15 text-[color:var(--neon-cyan)] ring-1 ring-[color:var(--neon-cyan)]/50 hover:bg-[color:var(--neon-cyan)]/25"
           >
             <Save className="mr-1.5 h-3.5 w-3.5" /> {isSaving ? "Guardando..." : "Guardar"}
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => setRunning((value) => !value)}
-            className="shrink-0 bg-[color:var(--neon-violet)]/15 text-[color:var(--neon-violet)] ring-1 ring-[color:var(--neon-violet)]/45 hover:bg-[color:var(--neon-violet)]/25"
-          >
-            {running ? (
-              <>
-                <Square className="mr-1.5 h-3.5 w-3.5" /> Detener
-              </>
-            ) : (
-              <>
-                <Play className="mr-1.5 h-3.5 w-3.5" /> Ejecutar
-              </>
-            )}
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -536,18 +575,18 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={duplicateProject}>
+              <DropdownMenuItem onClick={duplicateProject} disabled={!canEdit}>
                 <Copy className="h-4 w-4" />
                 Duplicar proyecto
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={clearCanvas}>
+              <DropdownMenuItem onClick={clearCanvas} disabled={!canEdit}>
                 <Eraser className="h-4 w-4" />
                 Limpiar canvas
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={deleteCurrentProject}
-                disabled={!projectId || isSaving}
+                disabled={!projectId || isSaving || !canEdit}
                 className="text-[color:var(--status-saturated)] focus:text-[color:var(--status-saturated)]"
               >
                 <FolderX className="h-4 w-4" />
@@ -610,9 +649,14 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
                       return (
                         <div
                           key={kind}
-                          draggable
+                          draggable={canEdit}
                           onDragStart={(e) => onLibDragStart(e, kind)}
-                          className="group flex cursor-grab items-center gap-2.5 rounded-md border border-border/60 bg-card/60 px-2.5 py-2 text-sm transition hover:border-[color:var(--neon-cyan)]/50 hover:bg-card active:cursor-grabbing"
+                          className={cn(
+                            "group flex items-center gap-2.5 rounded-md border border-border/60 bg-card/60 px-2.5 py-2 text-sm transition",
+                            canEdit
+                              ? "cursor-grab hover:border-[color:var(--neon-cyan)]/50 hover:bg-card active:cursor-grabbing"
+                              : "cursor-not-allowed opacity-60",
+                          )}
                         >
                           <div
                             className="flex h-7 w-7 items-center justify-center rounded-md ring-1"
@@ -638,6 +682,11 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
                 selected={selected}
                 connectingFromId={connectingFromId}
                 onStartConnection={() => {
+                  if (!canEdit) {
+                    setPersistenceError("El rol lector no puede crear conexiones.");
+                    return;
+                  }
+
                   if (!selected) return;
                   setConnectingFromId(selected.id);
                   setPersistenceMessage(
@@ -650,6 +699,11 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
                   setPersistenceMessage("Conexión cancelada.");
                 }}
                 onDeleteConnection={(edgeId) => {
+                  if (!canEdit) {
+                    setPersistenceError("El rol lector no puede eliminar conexiones.");
+                    return;
+                  }
+
                   setEdges((prev) => prev.filter((edge) => edge.id !== edgeId));
                   setPersistenceMessage("Conexión eliminada.");
                   setPersistenceError(null);
@@ -662,7 +716,7 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
         )}
 
         {/* Lienzo + métricas inferiores */}
-        <main className="relative flex min-h-[680px] min-w-0 flex-1 flex-col lg:min-h-0">
+        <main className="relative flex min-h-[680px] min-w-0 flex-1 flex-col overflow-x-auto lg:min-h-0 lg:overflow-x-visible">
           <div className="border-b border-border/60 bg-panel/45 p-2 lg:hidden">
             <div className="flex gap-2 overflow-x-auto pb-1">
               {CATEGORIES.flatMap((cat) => cat.kinds).map((kind) => {
@@ -673,7 +727,8 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
                     key={kind}
                     type="button"
                     onClick={() => addNodeToCanvas(kind)}
-                    className="flex h-10 shrink-0 items-center gap-2 rounded-md border border-border/60 bg-card/70 px-3 text-xs transition hover:border-[color:var(--neon-cyan)]/50 hover:bg-card"
+                    disabled={!canEdit}
+                    className="flex h-10 shrink-0 items-center gap-2 rounded-md border border-border/60 bg-card/70 px-3 text-xs transition hover:border-[color:var(--neon-cyan)]/50 hover:bg-card disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <Icon className="h-3.5 w-3.5" style={{ color: meta.color }} />
                     <span className="max-w-28 truncate">{meta.label}</span>
@@ -693,7 +748,7 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
               e.dataTransfer.dropEffect = "copy";
             }}
             onDrop={onCanvasDrop}
-            className="canvas-grid relative min-h-[520px] flex-1 overflow-hidden lg:min-h-0"
+            className="canvas-grid relative min-h-[520px] min-w-[1080px] flex-1 overflow-hidden lg:min-h-0 lg:min-w-0"
           >
             {/* Conexiones SVG */}
             <svg className="pointer-events-none absolute inset-0 h-full w-full">
@@ -789,7 +844,7 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
                   onMouseDown={(e) => onNodeMouseDown(e, n)}
                   className={cn(
                     "group absolute select-none rounded-xl bg-card/90 ring-1 backdrop-blur transition-all",
-                    "cursor-grab active:cursor-grabbing",
+                    canEdit ? "cursor-grab active:cursor-grabbing" : "cursor-default",
                     styles.ring,
                     styles.glow,
                     isSelected &&
@@ -863,7 +918,7 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
             })}
 
             {/* Control de tráfico */}
-            <div className="absolute left-3 right-3 top-3 rounded-lg border border-border/60 bg-panel/80 p-3 backdrop-blur sm:left-4 sm:right-auto sm:top-4 sm:w-72">
+            <div className="absolute left-3 top-3 w-[min(18rem,calc(100vw-1.5rem))] rounded-lg border border-border/60 bg-panel/80 p-3 backdrop-blur sm:left-4 sm:top-4 sm:w-72">
               <div className="mb-2 flex items-start justify-between gap-3">
                 <div>
                   <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
@@ -880,12 +935,13 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
                 min={50}
                 max={4000}
                 step={50}
+                disabled={!canEdit}
               />
             </div>
           </div>
 
           {/* Métricas inferiores */}
-          <div className="grid shrink-0 grid-cols-1 gap-3 border-t border-border/60 bg-panel/50 p-3 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="grid shrink-0 grid-cols-1 gap-3 border-t border-border/60 bg-panel/50 p-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
             <Metric
               label="Tráfico total"
               value={`${Math.round(traffic)} req/s`}
@@ -927,6 +983,7 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
                 onChange={updateSelected}
                 onDelete={deleteSelected}
                 metrics={result.perNode[selected.id]}
+                readOnly={!canEdit}
               />
             ) : (
               <div className="rounded-lg border border-border/60 bg-card/60 p-3 text-sm text-muted-foreground">
@@ -950,6 +1007,7 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
                   onChange={updateSelected}
                   onDelete={deleteSelected}
                   metrics={result.perNode[selected.id]}
+                  readOnly={!canEdit}
                 />
               ) : (
                 <div className="text-sm text-muted-foreground">
