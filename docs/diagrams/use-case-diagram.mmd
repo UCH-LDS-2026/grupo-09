@@ -1,47 +1,57 @@
 flowchart LR
     user([Usuario])
-    admin([Administrador])
-    system([Sistema de simulacion])
+    viewer([Rol viewer])
+    architect([Rol architect])
+    tests([Equipo tecnico])
 
-    subgraph app[Software Estres]
-        UC1((Registrarse / iniciar sesion))
-        UC2((Crear proyecto))
-        UC3((Editar diagrama de arquitectura))
-        UC4((Agregar componente al diagrama))
-        UC5((Conectar componentes))
-        UC6((Configurar componente))
-        UC7((Definir objetivos de prueba))
-        UC8((Ejecutar prueba de estres))
-        UC9((Visualizar metricas))
-        UC10((Detectar cuello de botella))
-        UC11((Generar recomendacion de escalado))
-        UC12((Guardar proyecto))
-        UC13((Consultar historial de simulaciones))
-        UC14((Administrar catalogo de componentes))
+    subgraph app[Software Estres - funcionalidades reales]
+        UC1((Registrarse))
+        UC2((Iniciar sesion))
+        UC3((Cerrar sesion))
+        UC4((Crear proyecto))
+        UC5((Cargar proyecto))
+        UC6((Guardar proyecto))
+        UC7((Borrar proyecto))
+        UC8((Agregar componentes))
+        UC9((Conectar componentes validos))
+        UC10((Modificar parametros))
+        UC11((Cambiar trafico entrante))
+        UC12((Ver simulacion en tiempo real))
+        UC13((Ver metricas y conclusion))
+        UC14((Ejecutar tests))
+    end
+
+    subgraph future[Mejoras futuras]
+        F1((Historial de simulaciones))
+        F2((Metricas historicas persistidas))
+        F3((Recomendaciones persistidas))
+        F4((Objetivos de proyecto))
+        F5((Administracion real de catalogo))
+        F6((Autorizacion fina por rol en backend))
     end
 
     user --> UC1
     user --> UC2
     user --> UC3
-    user --> UC7
-    user --> UC8
-    user --> UC9
-    user --> UC12
-    user --> UC13
 
-    admin --> UC14
-    admin --> UC1
+    viewer --> UC5
+    viewer --> UC12
+    viewer --> UC13
 
-    system --> UC10
-    system --> UC11
+    architect --> UC4
+    architect --> UC5
+    architect --> UC6
+    architect --> UC7
+    architect --> UC8
+    architect --> UC9
+    architect --> UC10
+    architect --> UC11
+    architect --> UC12
+    architect --> UC13
 
-    UC3 -. "<<include>>" .-> UC4
-    UC3 -. "<<include>>" .-> UC5
-    UC3 -. "<<include>>" .-> UC6
+    tests --> UC14
 
-    UC8 -. "<<include>>" .-> UC9
     UC8 -. "<<include>>" .-> UC10
-
-    UC10 -. "<<extend>>" .-> UC11
-    UC7 -. "<<extend>>" .-> UC8
-    UC13 -. "<<include>>" .-> UC9
+    UC9 -. "<<include>>" .-> UC12
+    UC11 -. "<<include>>" .-> UC12
+    UC12 -. "<<include>>" .-> UC13

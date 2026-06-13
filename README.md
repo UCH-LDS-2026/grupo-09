@@ -324,7 +324,7 @@ Si el email ya fue registrado, usar `Iniciar sesión` o registrar otro email.
 
 ## Próximos pasos
 
-- Guardar historial real de corridas.
-- Persistir métricas y recomendaciones de simulación.
-- Mejorar roles y permisos.
+- Persistir historial real de corridas en una nueva tabla.
+- Persistir métricas históricas y recomendaciones cuando el alcance lo requiera.
+- Agregar autorización fina por rol en backend.
 - Agregar más pruebas si el alcance crece.
