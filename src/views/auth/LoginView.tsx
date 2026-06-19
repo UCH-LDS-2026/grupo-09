@@ -23,11 +23,11 @@ export function LoginView({ error, isSubmitting, onLogin, onRegister }: LoginVie
     event.preventDefault();
 
     if (mode === "register") {
-      await onRegister({ name, email, password });
+      await onRegister({ nombre: name, email, contrasena: password });
       return;
     }
 
-    await onLogin({ email, password });
+    await onLogin({ email, contrasena: password });
   };
 
   const isRegistering = mode === "register";

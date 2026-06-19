@@ -1,7 +1,7 @@
 flowchart LR
     user([Usuario])
-    viewer([Rol viewer])
-    architect([Rol architect])
+    lector([Rol lector])
+    arquitecto([Rol arquitecto])
     tests([Equipo tecnico])
 
     subgraph app[Software Estres - funcionalidades reales]
@@ -34,20 +34,20 @@ flowchart LR
     user --> UC2
     user --> UC3
 
-    viewer --> UC5
-    viewer --> UC12
-    viewer --> UC13
+    lector --> UC5
+    lector --> UC12
+    lector --> UC13
 
-    architect --> UC4
-    architect --> UC5
-    architect --> UC6
-    architect --> UC7
-    architect --> UC8
-    architect --> UC9
-    architect --> UC10
-    architect --> UC11
-    architect --> UC12
-    architect --> UC13
+    arquitecto --> UC4
+    arquitecto --> UC5
+    arquitecto --> UC6
+    arquitecto --> UC7
+    arquitecto --> UC8
+    arquitecto --> UC9
+    arquitecto --> UC10
+    arquitecto --> UC11
+    arquitecto --> UC12
+    arquitecto --> UC13
 
     tests --> UC14
 

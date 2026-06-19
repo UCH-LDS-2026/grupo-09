@@ -6,4 +6,4 @@ import { authMiddleware } from "../middlewares/auth.middleware.js";
 export const simulationsRouter = Router();
 
 simulationsRouter.use(authMiddleware);
-simulationsRouter.post("/run", simulationsController.run);
+simulationsRouter.post("/ejecutar", simulationsController.run);

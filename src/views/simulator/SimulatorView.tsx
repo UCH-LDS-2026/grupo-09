@@ -1,8 +1,8 @@
 import SimulatorDashboard from "@/components/SimulatorDashboard";
-import type { AuthUser } from "@/models/auth";
+import type { UsuarioAutenticado } from "@/models/auth";
 
 interface SimulatorViewProps {
-  user: AuthUser;
+  user: UsuarioAutenticado;
   onLogout: () => void;
 }
 

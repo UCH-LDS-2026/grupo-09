@@ -6,6 +6,8 @@ import { env } from "../config/env.js";
 const HASH_ALGORITHM = "sha256";
 const HASH_ITERATIONS = 100_000;
 const HASH_KEY_LENGTH = 32;
+const SESSION_TTL_SECONDS = 60 * 60 * 8;
+const ROL_PREDETERMINADO = "arquitecto";
 
 function createHttpError(statusCode, message) {
   const error = new Error(message);
@@ -36,9 +38,9 @@ function assertPassword(password) {
 }
 
 export function validateRegistrationPayload(payload = {}) {
-  const name = normalizeName(payload.name);
+  const name = normalizeName(payload.nombre);
   const email = normalizeEmail(payload.email);
-  const password = String(payload.password ?? "");
+  const password = String(payload.contrasena ?? "");
 
   if (!name) {
     throw createHttpError(400, "Ingresá tu nombre.");
@@ -91,9 +93,9 @@ function verifyPassword(password, passwordHash) {
 function mapUser(row) {
   return {
     id: String(row.id),
-    name: row.name,
+    nombre: row.nombre,
     email: row.email,
-    role: row.role,
+    rol: row.rol,
   };
 }
 
@@ -110,16 +112,19 @@ function sign(value) {
 }
 
 function createSession(user) {
+  const nowSeconds = Math.floor(Date.now() / 1000);
   const payload = base64UrlEncode(
     JSON.stringify({
       sub: user.id,
       email: user.email,
-      role: user.role,
+      rol: user.rol,
+      iat: nowSeconds,
+      exp: nowSeconds + SESSION_TTL_SECONDS,
     }),
   );
 
   return {
-    user,
+    usuario: user,
     token: `ses.${payload}.${sign(payload)}`,
   };
 }
@@ -132,7 +137,14 @@ function parseToken(token) {
   }
 
   try {
-    return JSON.parse(base64UrlDecode(payload));
+    const parsedPayload = JSON.parse(base64UrlDecode(payload));
+    const nowSeconds = Math.floor(Date.now() / 1000);
+
+    if (!Number.isFinite(parsedPayload.exp) || parsedPayload.exp <= nowSeconds) {
+      throw createHttpError(401, "Sesión inválida o vencida.");
+    }
+
+    return parsedPayload;
   } catch {
     throw createHttpError(401, "Sesión inválida o vencida.");
   }
@@ -145,15 +157,15 @@ export const authService = {
 
     try {
       const [result] = await pool.execute(
-        "INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)",
-        [name, email, hashPassword(password), "architect"],
+        "INSERT INTO usuarios (nombre, email, hash_contrasena, rol) VALUES (?, ?, ?, ?)",
+        [name, email, hashPassword(password), ROL_PREDETERMINADO],
       );
 
       return createSession({
         id: String(result.insertId),
-        name,
+        nombre: name,
         email,
-        role: "architect",
+        rol: ROL_PREDETERMINADO,
       });
     } catch (error) {
       if (error.code === "ER_DUP_ENTRY") {
@@ -167,18 +179,18 @@ export const authService = {
   async login(payload = {}) {
     const pool = getDatabasePool();
     const email = normalizeEmail(payload.email);
-    const password = String(payload.password ?? "");
+    const password = String(payload.contrasena ?? "");
 
     assertEmail(email);
     assertPassword(password);
 
     const [rows] = await pool.execute(
-      "SELECT id, name, email, password_hash, role FROM users WHERE email = ? LIMIT 1",
+      "SELECT id, nombre, email, hash_contrasena, rol FROM usuarios WHERE email = ? LIMIT 1",
       [email],
     );
     const user = rows[0];
 
-    if (!user || !verifyPassword(password, user.password_hash)) {
+    if (!user || !verifyPassword(password, user.hash_contrasena)) {
       throw createHttpError(401, "Correo o contraseña incorrectos.");
     }
 
@@ -195,7 +207,7 @@ export const authService = {
 
     const pool = getDatabasePool();
     const [rows] = await pool.execute(
-      "SELECT id, name, email, role FROM users WHERE id = ? LIMIT 1",
+      "SELECT id, nombre, email, rol FROM usuarios WHERE id = ? LIMIT 1",
       [userId],
     );
     const user = rows[0];

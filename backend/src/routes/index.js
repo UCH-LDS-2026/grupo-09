@@ -7,7 +7,7 @@ import { simulationsRouter } from "./simulations.routes.js";
 
 export const apiRouter = Router();
 
-apiRouter.use("/auth", authRouter);
 apiRouter.use("/health", healthRouter);
-apiRouter.use("/projects", projectsRouter);
-apiRouter.use("/simulations", simulationsRouter);
+apiRouter.use("/autenticacion", authRouter);
+apiRouter.use("/proyectos", projectsRouter);
+apiRouter.use("/simulaciones", simulationsRouter);
