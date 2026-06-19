@@ -36,28 +36,119 @@ El frontend se organiza así:
 - `src/models/`: tipos TypeScript.
 - `src/lib/`: utilidades y puente al motor compartido.
 
-## Instalación
+## Instalación rápida
 
-```bash
-npm install
-cd backend
-npm install
-cd ..
-```
+Estos son los pasos para dejar el proyecto corriendo desde cero en una Mac. Para la defensa se debe usar la rama `segundamain`.
+
+1. Instalar Homebrew si no está instalado:
+
+   ```bash
+   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+   ```
+
+2. Instalar Git, Node y MySQL:
+
+   ```bash
+   brew install git node mysql
+   ```
+
+3. Levantar MySQL:
+
+   ```bash
+   brew services start mysql
+   ```
+
+4. Clonar el repositorio:
+
+   ```bash
+   git clone https://github.com/UCH-LDS-2026/grupo-09.git
+   ```
+
+5. Entrar al proyecto:
+
+   ```bash
+   cd grupo-09
+   ```
+
+6. Cambiar a la rama correcta:
+
+   ```bash
+   git checkout segundamain
+   git pull origin segundamain
+   ```
+
+7. Instalar dependencias del frontend:
+
+   ```bash
+   npm install
+   ```
+
+8. Instalar dependencias del backend:
+
+   ```bash
+   cd backend
+   npm install
+   cd ..
+   ```
+
+9. Crear archivo `.env` del backend:
+
+   ```bash
+   cp backend/.env.example backend/.env
+   ```
+
+   Si MySQL tiene contraseña, completar `DB_PASSWORD` dentro de `backend/.env`.
+
+10. Crear la base de datos:
+
+    ```bash
+    mysql -u root -p < database/schema.sql
+    ```
+
+    Si MySQL no tiene contraseña:
+
+    ```bash
+    mysql -u root < database/schema.sql
+    ```
+
+11. Opcional: cargar datos de prueba:
+
+    ```bash
+    mysql -u root -p softwareestres < database/seed-demo.sql
+    ```
+
+12. Levantar backend en una terminal:
+
+    ```bash
+    cd backend
+    npm run dev
+    ```
+
+13. Levantar frontend en otra terminal, desde la carpeta `grupo-09`:
+
+    ```bash
+    npm run dev
+    ```
+
+14. Abrir el sistema:
+
+    ```txt
+    http://localhost:8080
+    ```
+
+15. Verificar backend:
+
+    ```txt
+    http://localhost:3001/health
+    ```
+
+16. Ejecutar tests desde la carpeta `grupo-09`:
+
+    ```bash
+    npm test
+    ```
 
 ## Base de datos
-
-Crear estructura y catálogo inicial:
-
-```bash
-mysql -u root -p < database/schema.sql
-```
-
-Cargar datos demo opcionales:
-
-```bash
-mysql -u root -p softwareestres < database/seed-demo.sql
-```
 
 Tablas actuales:
 
@@ -67,52 +158,6 @@ Tablas actuales:
 - `tipos_componentes`: tipos de nodos disponibles y valores predeterminados.
 - `nodos_proyectos`: nodos colocados en el canvas.
 - `conexiones_proyectos`: conexiones entre nodos.
-
-## Variables de entorno
-
-Copiar ejemplo:
-
-```bash
-cp backend/.env.example backend/.env
-```
-
-Valores esperados:
-
-```txt
-NODE_ENV=development
-API_PORT=3001
-CORS_ORIGIN=http://localhost:8080
-SESSION_SECRET=reemplazar_por_un_valor_largo_y_privado
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_NAME=softwareestres
-DB_USER=root
-DB_PASSWORD=
-```
-
-No subir `backend/.env` al repositorio.
-
-## Levantar
-
-Backend:
-
-```bash
-cd backend
-npm run dev
-```
-
-Frontend:
-
-```bash
-npm run dev
-```
-
-URLs locales:
-
-```txt
-Frontend: http://localhost:8080/
-Backend:  http://localhost:3001/
-```
 
 ## Endpoints
 
