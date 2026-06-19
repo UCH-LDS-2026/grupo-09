@@ -33,7 +33,7 @@ import {
   Eye,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { AuthUser } from "@/models/auth";
+import type { UsuarioAutenticado } from "@/models/auth";
 import { projectService, type ProjectSummary } from "@/services/projectService";
 import { simulationService } from "@/services/simulationService";
 import {
@@ -59,7 +59,7 @@ import {
 } from "@/components/simulator/simulatorConfig";
 
 interface SimulatorDashboardProps {
-  user?: AuthUser;
+  user?: UsuarioAutenticado;
   onLogout?: () => void;
 }
 
@@ -68,10 +68,10 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
   const [edges, setEdges] = useState<SimEdge[]>(initialEdges);
   const [selectedId, setSelectedId] = useState<string | null>("n_app");
   const [traffic, setTraffic] = useState(600);
-  const [projectId, setProjectId] = useState<number | null>(null);
-  const [projectName, setProjectName] = useState("plataforma-checkout.v1");
+  const [proyectoId, setProyectoId] = useState<number | null>(null);
+  const [nombreProyecto, setNombreProyecto] = useState("plataforma-checkout.v1");
   const [connectingFromId, setConnectingFromId] = useState<string | null>(null);
-  const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [proyectosGuardados, setProyectosGuardados] = useState<ProjectSummary[]>([]);
   const [isLoadingProjects, setIsLoadingProjects] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [backendResult, setBackendResult] = useState<SimResult | null>(null);
@@ -86,9 +86,9 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
   const pendingDragRef = useRef<{ id: string; x: number; y: number } | null>(null);
   const dragFrameRef = useRef<number | null>(null);
   const resizeRef = useRef<{ side: "left" | "right"; startX: number; startW: number } | null>(null);
-  const canEdit = user?.role !== "viewer";
+  const canEdit = user?.rol !== "lector";
   const roleLabel =
-    user?.role === "viewer" ? "Lector" : user?.role === "admin" ? "Admin" : "Arquitecto";
+    user?.rol === "lector" ? "Lector" : user?.rol === "administrador" ? "Admin" : "Arquitecto";
 
   useEffect(() => {
     return () => {
@@ -153,8 +153,8 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
 
     setIsLoadingProjects(true);
     try {
-      const savedProjects = await projectService.list();
-      setProjects(savedProjects);
+      const proyectos = await projectService.list();
+      setProyectosGuardados(proyectos);
     } catch (error) {
       setPersistenceError(
         error instanceof Error ? error.message : "No se pudieron listar proyectos.",
@@ -175,9 +175,9 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
       simulationService
         .run(
           {
-            nodes,
-            edges,
-            traffic,
+            nodos: nodes,
+            conexiones: edges,
+            trafico: traffic,
           },
           controller.signal,
         )
@@ -337,13 +337,13 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
         return;
       }
 
-      const project = await projectService.get(id);
-      setProjectId(project.id);
-      setProjectName(project.name);
-      setTraffic(project.incomingTrafficRps);
-      setNodes(project.nodes);
-      setEdges(project.edges);
-      setSelectedId(project.nodes[0]?.id ?? null);
+      const proyecto = await projectService.get(id);
+      setProyectoId(proyecto.id);
+      setNombreProyecto(proyecto.nombre);
+      setTraffic(proyecto.traficoEntranteRps);
+      setNodes(proyecto.nodos);
+      setEdges(proyecto.conexiones);
+      setSelectedId(proyecto.nodos[0]?.id ?? null);
       setConnectingFromId(null);
       setPersistenceMessage("Proyecto cargado.");
     } catch (error) {
@@ -359,8 +359,8 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
       return;
     }
 
-    setProjectId(null);
-    setProjectName("nuevo-proyecto");
+    setProyectoId(null);
+    setNombreProyecto("nuevo-proyecto");
     setNodes([]);
     setEdges([]);
     setTraffic(600);
@@ -387,9 +387,9 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
     setPersistenceMessage(null);
 
     try {
-      const normalizedProjectName = projectName.trim();
+      const nombreProyectoNormalizado = nombreProyecto.trim();
 
-      if (!normalizedProjectName) {
+      if (!nombreProyectoNormalizado) {
         setPersistenceError("Poné un nombre para guardar el proyecto.");
         return;
       }
@@ -399,18 +399,18 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
         return;
       }
 
-      const project = await projectService.save({
-        id: projectId,
-        user,
-        name: normalizedProjectName,
-        traffic,
-        running: true,
-        nodes,
-        edges,
+      const proyecto = await projectService.save({
+        id: proyectoId,
+        usuario: user,
+        nombre: nombreProyectoNormalizado,
+        trafico: traffic,
+        estaEjecutando: true,
+        nodos: nodes,
+        conexiones: edges,
       });
 
-      setProjectId(project.id);
-      setProjectName(project.name);
+      setProyectoId(proyecto.id);
+      setNombreProyecto(proyecto.nombre);
       setPersistenceMessage("Proyecto guardado.");
       await refreshProjects();
     } catch (error) {
@@ -428,16 +428,16 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
       return;
     }
 
-    if (!user?.email || !projectId) return;
+    if (!user?.email || !proyectoId) return;
 
     setIsSaving(true);
     setPersistenceError(null);
     setPersistenceMessage(null);
 
     try {
-      await projectService.remove(projectId);
-      setProjectId(null);
-      setProjectName("nuevo-proyecto");
+      await projectService.remove(proyectoId);
+      setProyectoId(null);
+      setNombreProyecto("nuevo-proyecto");
       setNodes([]);
       setEdges([]);
       setSelectedId(null);
@@ -459,8 +459,8 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
       return;
     }
 
-    setProjectId(null);
-    setProjectName(`${projectName.trim() || "proyecto"}-copia`);
+    setProyectoId(null);
+    setNombreProyecto(`${nombreProyecto.trim() || "proyecto"}-copia`);
     setConnectingFromId(null);
     setPersistenceMessage("Proyecto duplicado como copia sin guardar.");
     setPersistenceError(null);
@@ -505,8 +505,8 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
             <div className="mt-1 flex min-w-0 flex-col gap-1.5 font-mono text-[11px] text-muted-foreground sm:mt-0.5 sm:flex-row sm:items-center sm:gap-2">
               <span className="shrink-0">Proyecto actual:</span>
               <Input
-                value={projectName}
-                onChange={(event) => setProjectName(event.target.value)}
+                value={nombreProyecto}
+                onChange={(event) => setNombreProyecto(event.target.value)}
                 readOnly={!canEdit}
                 className="h-7 min-w-0 border-border/50 bg-card/50 px-2 font-mono text-[11px] sm:w-56"
               />
@@ -535,19 +535,19 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
             </span>
           )}
           <select
-            value={projectId ?? ""}
+            value={proyectoId ?? ""}
             onChange={(event) => {
               const nextProjectId = Number(event.target.value);
               if (nextProjectId) void loadProject(nextProjectId);
             }}
-            disabled={isLoadingProjects || !projects.length}
+            disabled={isLoadingProjects || !proyectosGuardados.length}
             className="h-8 min-w-0 max-w-full shrink rounded-md border border-border/60 bg-card/70 px-2 font-mono text-[11px] text-foreground outline-none transition hover:border-[color:var(--neon-cyan)]/50 disabled:cursor-not-allowed disabled:opacity-50 sm:max-w-48"
             title="Cargar proyecto guardado"
           >
             <option value="">Proyectos guardados</option>
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name}
+            {proyectosGuardados.map((proyecto) => (
+              <option key={proyecto.id} value={proyecto.id}>
+                {proyecto.nombre}
               </option>
             ))}
           </select>
@@ -586,7 +586,7 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={deleteCurrentProject}
-                disabled={!projectId || isSaving || !canEdit}
+                disabled={!proyectoId || isSaving || !canEdit}
                 className="text-[color:var(--status-saturated)] focus:text-[color:var(--status-saturated)]"
               >
                 <FolderX className="h-4 w-4" />

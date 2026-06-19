@@ -1,6 +1,6 @@
 # Software Estrés - Grupo 9
 
-Software Estrés es una aplicación web para diseñar, guardar y simular arquitecturas distribuidas bajo carga. El usuario arma un flujo con puerta de enlace API, balanceadores, servicios, bases de datos y colas; la simulación queda siempre activa para ver salida procesada, latencia, error, costo mensual y cuellos de botella.
+Aplicación web para diseñar, guardar y simular arquitecturas distribuidas bajo carga. El usuario arma un flujo con componentes como puerta de enlace API, balanceadores, servicios, bases de datos y colas; el sistema calcula salida procesada, latencia, error, costo mensual y cuellos de botella.
 
 ## Integrantes
 
@@ -8,323 +8,184 @@ Software Estrés es una aplicación web para diseñar, guardar y simular arquite
 - Gian Franco Siccardi
 - Santiago Rivamar
 
-## Estado actual
+## Stack
 
-- Frontend React + TypeScript con Vite.
-- Backend Node.js + Express.
-- Base de datos MySQL.
-- Registro e inicio de sesión conectados a la tabla `users`.
-- Sesión persistida en el navegador y endpoints privados protegidos con `Authorization: Bearer`.
-- Persistencia de proyectos, nodos y conexiones.
-- Motor de simulación compartido entre frontend y backend.
-- Tests automatizados cortos con Vitest.
-- Guía completa de exposición en `DEFENSA.md`.
+- Frontend: React + TypeScript + Vite.
+- Backend: Node.js + Express.
+- Base de datos: MySQL 8.
+- Tests: Vitest.
+- Motor compartido: `shared/simulator-core.js`.
 
-## Requisitos
+## Arquitectura
 
-- Git.
-- Node.js 22 o superior.
-- npm 10 o superior.
-- MySQL 8.
+El backend mantiene una separación tipo MVC:
 
-Verificar versiones:
+- `backend/src/routes/`: define URLs y delega a controladores.
+- `backend/src/controllers/`: recibe request/response y llama servicios.
+- `backend/src/services/`: contiene lógica de negocio, validaciones, DB y simulación.
+- `backend/src/middlewares/`: autenticación, errores, seguridad y rate limit.
+- `backend/src/config/`: variables de entorno y pool MySQL.
+- `database/`: esquema, migraciones y datos demo.
 
-```bash
-node --version
-npm --version
-mysql --version
-git --version
-```
+El frontend se organiza así:
 
-## Descargar desde GitHub
+- `src/views/`: pantallas principales.
+- `src/components/`: componentes visuales.
+- `src/controllers/`: estado de aplicación/autenticación.
+- `src/services/`: cliente HTTP hacia el backend.
+- `src/models/`: tipos TypeScript.
+- `src/lib/`: utilidades y puente al motor compartido.
 
-En una computadora nueva:
-
-```bash
-git clone git@github.com:UCH-LDS-2026/grupo-09.git
-cd grupo-09
-git switch segundamain
-```
-
-Si se descarga como ZIP desde GitHub, descomprimirlo y abrir una terminal dentro de la carpeta del proyecto.
-
-## Instalar dependencias
-
-Instalar dependencias del frontend desde la raíz:
+## Instalación
 
 ```bash
 npm install
-```
-
-Instalar dependencias del backend:
-
-```bash
 cd backend
 npm install
 cd ..
 ```
 
-## Preparar la base de datos
+## Base de datos
 
-Crear la base y sus tablas ejecutando el script SQL:
+Crear estructura y catálogo inicial:
 
 ```bash
 mysql -u root -p < database/schema.sql
 ```
 
-El script crea la base `softwareestres`, las tablas principales y datos iniciales de catálogo.
-
-`database/seed-demo.sql` no crea la estructura de la base. Es un script opcional de demostración que se ejecuta después de `schema.sql` para cargar un usuario y proyectos listos para exponer.
-
-Para cargar esos datos de exposición:
+Cargar datos demo opcionales:
 
 ```bash
 mysql -u root -p softwareestres < database/seed-demo.sql
 ```
 
-Usuario demo:
+Tablas actuales:
 
-```txt
-Email: demo@softwareestres.test
-Contraseña: demo1234
-```
+- `usuarios`: cuentas, email, contraseña hasheada y rol.
+- `proyectos`: proyectos guardados por usuario.
+- `categorias_componentes`: agrupaciones del catálogo.
+- `tipos_componentes`: tipos de nodos disponibles y valores predeterminados.
+- `nodos_proyectos`: nodos colocados en el canvas.
+- `conexiones_proyectos`: conexiones entre nodos.
 
-El seed crea tres proyectos: `Demo estable`, `Demo falla por exceso` y `Demo cuello de botella API`. Conviene ejecutarlo antes de la defensa para no depender de armar todos los escenarios en vivo.
+## Variables de entorno
 
-Tablas principales:
-
-- `users`: usuarios registrados.
-- `projects`: proyectos guardados por usuario.
-- `component_categories`: categorías de componentes.
-- `component_types`: tipos de componentes disponibles.
-- `projects_nodes`: nodos del diagrama.
-- `projects_edges`: conexiones entre nodos.
-
-Tablas eliminadas del MVP:
-
-- `objective_types`
-- `project_objectives`
-- `simulation_runs`
-- `simulation_node_metrics`
-- `scaling_recommendations`
-
-No las usa el backend ni el frontend actual. Si una base vieja ya las tiene, se pueden eliminar con:
-
-```bash
-mysql -u root -p softwareestres < database/migrations/003-drop-unused-mvp-tables.sql
-```
-
-## Configurar variables del backend
-
-Copiar el ejemplo:
+Copiar ejemplo:
 
 ```bash
 cp backend/.env.example backend/.env
 ```
 
-Editar `backend/.env` con los datos locales. Este archivo no debe subirse a GitHub:
+Valores esperados:
 
 ```txt
 NODE_ENV=development
 API_PORT=3001
 CORS_ORIGIN=http://localhost:8080
+SESSION_SECRET=reemplazar_por_un_valor_largo_y_privado
 DB_HOST=127.0.0.1
 DB_PORT=3306
 DB_NAME=softwareestres
 DB_USER=root
-DB_PASSWORD=tu_contraseña
-SESSION_SECRET=reemplazar_por_un_valor_largo_y_privado
+DB_PASSWORD=
 ```
 
-En desarrollo el backend acepta puertos locales de Vite como `8080`, `8081` o similares.
+No subir `backend/.env` al repositorio.
 
-Notas de seguridad:
+## Levantar
 
-- `backend/.env` queda ignorado por Git.
-- `backend/.env.example` sí se versiona porque no contiene secretos reales.
-- No subir contraseñas, tokens, URLs privadas ni claves reales.
-- Cambiar `SESSION_SECRET` por un valor largo y privado en cada entorno.
-- Antes de subir, revisar con `git status --short` que no aparezcan archivos `.env`.
-
-## Levantar el sistema
-
-Terminal 1: backend
+Backend:
 
 ```bash
 cd backend
 npm run dev
 ```
 
-Debe mostrar:
-
-```txt
-API running on http://localhost:3001
-```
-
-Terminal 2: frontend
+Frontend:
 
 ```bash
 npm run dev
 ```
 
-Vite muestra la URL disponible. Normalmente es:
+URLs locales:
 
 ```txt
-http://localhost:8080/
+Frontend: http://localhost:8080/
+Backend:  http://localhost:3001/
 ```
 
-Si `8080` está ocupado, puede usar otro puerto, por ejemplo:
-
-```txt
-http://localhost:8081/
-```
-
-## Usar la aplicación
-
-1. Abrir la URL del frontend.
-2. Elegir `Crear cuenta`.
-3. Cargar nombre, email y contraseña.
-4. Al registrarse correctamente, el sistema entra al simulador.
-5. Agregar o mover componentes en el canvas.
-6. Configurar propiedades del componente seleccionado.
-7. Subir o bajar el tráfico entrante para ver métricas en tiempo real.
-8. Guardar el proyecto para persistirlo en MySQL.
-9. Cerrar sesión para volver al acceso.
-
-Si el usuario ya existe, entrar desde `Iniciar sesión` con email y contraseña.
-
-## Endpoints útiles
+## Endpoints
 
 Health:
 
 ```txt
 GET http://localhost:3001/health
-GET http://localhost:3001/health/db
 GET http://localhost:3001/api/health
+GET http://localhost:3001/api/health/db
 ```
 
 Autenticación:
 
 ```txt
-POST http://localhost:3001/api/auth/register
-POST http://localhost:3001/api/auth/login
+POST http://localhost:3001/api/autenticacion/registro
+POST http://localhost:3001/api/autenticacion/login
 ```
 
 Proyectos:
 
 ```txt
-GET    http://localhost:3001/api/projects
-POST   http://localhost:3001/api/projects
-GET    http://localhost:3001/api/projects/:id
-PUT    http://localhost:3001/api/projects/:id
-DELETE http://localhost:3001/api/projects/:id
+GET    http://localhost:3001/api/proyectos
+POST   http://localhost:3001/api/proyectos
+GET    http://localhost:3001/api/proyectos/:id
+PUT    http://localhost:3001/api/proyectos/:id
+DELETE http://localhost:3001/api/proyectos/:id
 ```
 
 Simulación:
 
 ```txt
-POST http://localhost:3001/api/simulations/run
+POST http://localhost:3001/api/simulaciones/ejecutar
 ```
 
-Los endpoints de proyectos y simulación requieren header:
+Los endpoints privados requieren:
 
 ```txt
-Authorization: Bearer <token_devuelto_por_login_o_register>
+Authorization: Bearer <token>
 ```
 
-## Tests
+## Tests y validaciones
 
-Ejecutar todos:
+Ejecutar todo:
 
 ```bash
 npm test
+npm run lint
+npm run build
 ```
 
 Tests actuales:
 
-- `tests/unitarios.test.ts`: funciones pequeñas del simulador y validación de email de registro.
-- `tests/simulator.test.ts`: reglas de negocio del simulador.
-- `tests/integracion.test.ts`: flujo completo puerta de enlace -> aplicación -> base de datos.
+- `tests/unitarios.test.ts`: funciones aisladas, reglas de negocio y validación de auth.
+- `tests/integracion.test.ts`: simulación completa de una arquitectura puerta de enlace -> aplicación -> base de datos.
 
-Total actual: 10 tests.
+Total actual:
 
-Ejecutar integración solamente:
-
-```bash
-npx vitest run tests/integracion.test.ts
+```txt
+2 archivos
+10 tests
 ```
 
-Ejecutar unitarios solamente:
+## Seguridad Aplicada
 
-```bash
-npx vitest run tests/unitarios.test.ts
-```
+- Contraseñas con PBKDF2 + salt.
+- Tokens firmados con HMAC.
+- Tokens con expiración.
+- Endpoints privados protegidos por middleware de autenticación.
+- Rate limit básico en `/api`.
+- Headers de seguridad básicos.
+- Errores 500 sin stack trace en respuesta HTTP.
+- Variables sensibles fuera del repositorio.
 
-## Validaciones recomendadas
+## Notas
 
-Después de instalar en una máquina nueva:
-
-```bash
-npm run lint
-npm test
-npm run build
-```
-
-Probar backend:
-
-```bash
-curl http://localhost:3001/health
-curl http://localhost:3001/health/db
-```
-
-Registrar usuario por API:
-
-```bash
-curl -X POST http://localhost:3001/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Usuario Demo","email":"usuario@sistema.test","password":"demo1234"}'
-```
-
-Iniciar sesión por API:
-
-```bash
-curl -X POST http://localhost:3001/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"usuario@sistema.test","password":"demo1234"}'
-```
-
-Probar endpoint protegido sin token debe devolver `401`:
-
-```bash
-curl -i http://localhost:3001/api/projects
-```
-
-## Problemas comunes
-
-Si el frontend queda en `Validando...`, revisar que el backend esté iniciado en `http://localhost:3001`.
-
-Si `/health/db` devuelve error, revisar:
-
-- MySQL iniciado.
-- Base `softwareestres` creada.
-- Contraseña correcta en `backend/.env`.
-
-Si Vite abre `localhost:8081` en vez de `8080`, es normal: significa que `8080` estaba ocupado.
-
-Si el email ya fue registrado, usar `Iniciar sesión` o registrar otro email.
-
-## Carpetas principales
-
-- `src/`: frontend React.
-- `backend/`: API Express.
-- `database/`: schema SQL y migraciones.
-- `shared/`: motor y reglas compartidas.
-- `tests/`: pruebas automatizadas.
-- `DEFENSA.md`: explicación completa para presentar el TP5.
-
-## Próximos pasos
-
-- Persistir historial real de corridas en una nueva tabla.
-- Persistir métricas históricas y recomendaciones cuando el alcance lo requiera.
-- Agregar autorización fina por rol en backend.
-- Agregar más pruebas si el alcance crece.
+El motor interno de simulación usa nombres técnicos como `nodes`, `edges` y `kind` porque es un módulo compartido. El contrato HTTP, backend y base de datos usan nombres en español.

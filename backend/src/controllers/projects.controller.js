@@ -12,11 +12,19 @@ function parseProjectId(rawId) {
   return id;
 }
 
+function assertCanEdit(user) {
+  if (user?.rol !== "lector") return;
+
+  const error = new Error("El rol lector no puede modificar proyectos.");
+  error.statusCode = 403;
+  throw error;
+}
+
 export const projectsController = {
   async list(request, response, next) {
     try {
-      const projects = await projectsService.listProjects(request.user.email);
-      response.status(200).json({ projects });
+      const proyectos = await projectsService.listProjects(request.user.email);
+      response.status(200).json({ proyectos });
     } catch (error) {
       next(error);
     }
@@ -24,11 +32,11 @@ export const projectsController = {
 
   async getById(request, response, next) {
     try {
-      const project = await projectsService.getProject(
+      const proyecto = await projectsService.getProject(
         parseProjectId(request.params.id),
         request.user.email,
       );
-      response.status(200).json({ project });
+      response.status(200).json({ proyecto });
     } catch (error) {
       next(error);
     }
@@ -36,8 +44,9 @@ export const projectsController = {
 
   async create(request, response, next) {
     try {
-      const project = await projectsService.saveProject(request.body, request.user);
-      response.status(201).json({ project });
+      assertCanEdit(request.user);
+      const proyecto = await projectsService.saveProject(request.body, request.user);
+      response.status(201).json({ proyecto });
     } catch (error) {
       next(error);
     }
@@ -45,14 +54,15 @@ export const projectsController = {
 
   async update(request, response, next) {
     try {
-      const project = await projectsService.saveProject(
+      assertCanEdit(request.user);
+      const proyecto = await projectsService.saveProject(
         {
           ...request.body,
           id: parseProjectId(request.params.id),
         },
         request.user,
       );
-      response.status(200).json({ project });
+      response.status(200).json({ proyecto });
     } catch (error) {
       next(error);
     }
@@ -60,8 +70,9 @@ export const projectsController = {
 
   async delete(request, response, next) {
     try {
+      assertCanEdit(request.user);
       await projectsService.deleteProject(parseProjectId(request.params.id), request.user.email);
-      response.status(200).json({ deleted: true });
+      response.status(200).json({ eliminado: true });
     } catch (error) {
       next(error);
     }

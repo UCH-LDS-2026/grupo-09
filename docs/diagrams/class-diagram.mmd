@@ -1,87 +1,87 @@
 classDiagram
     direction LR
 
-    class User {
+    class Usuario {
         +bigint id
-        +string name
+        +string nombre
         +string email
-        +string passwordHash
-        +enum role
-        +datetime createdAt
-        +datetime updatedAt
+        +string hash_contrasena
+        +enum rol
+        +datetime creado_en
+        +datetime actualizado_en
     }
 
-    class Project {
+    class Proyecto {
         +bigint id
-        +bigint userId
-        +string name
+        +bigint usuario_id
+        +string nombre
         +string slug
-        +string description
-        +int incomingTrafficRps
-        +boolean isRunning
-        +datetime createdAt
-        +datetime updatedAt
+        +string descripcion
+        +int trafico_entrante_rps
+        +boolean esta_ejecutando
+        +datetime creado_en
+        +datetime actualizado_en
     }
 
-    class ComponentCategory {
+    class CategoriaComponente {
         +bigint id
-        +string name
-        +int displayOrder
-        +datetime createdAt
+        +string nombre
+        +int orden_visualizacion
+        +datetime creado_en
     }
 
-    class ComponentType {
+    class TipoComponente {
         +bigint id
-        +bigint categoryId
-        +string code
-        +string label
-        +string icon
-        +string colorToken
-        +int defaultInstances
-        +int defaultCapacityRps
-        +int defaultBaseLatencyMs
-        +int defaultQueueSize
-        +int defaultTimeoutMs
-        +decimal defaultCostPerInstance
-        +boolean isActive
-        +datetime createdAt
-        +datetime updatedAt
+        +bigint categoria_id
+        +string codigo
+        +string etiqueta
+        +string icono
+        +string token_color
+        +int instancias_predeterminadas
+        +int capacidad_predeterminada_rps
+        +int latencia_base_predeterminada_ms
+        +int tamano_cola_predeterminado
+        +int tiempo_espera_predeterminado_ms
+        +decimal costo_por_instancia_predeterminado
+        +boolean activo
+        +datetime creado_en
+        +datetime actualizado_en
     }
 
-    class ProjectNode {
+    class NodoProyecto {
         +bigint id
-        +bigint projectId
-        +bigint componentTypeId
-        +string clientNodeId
-        +string name
-        +decimal positionX
-        +decimal positionY
-        +int instances
-        +int capacityRps
-        +int baseLatencyMs
-        +int queueSize
-        +int timeoutMs
-        +decimal costPerInstance
-        +datetime createdAt
-        +datetime updatedAt
+        +bigint proyecto_id
+        +bigint tipo_componente_id
+        +string nodo_cliente_id
+        +string nombre
+        +decimal posicion_x
+        +decimal posicion_y
+        +int instancias
+        +int capacidad_rps
+        +int latencia_base_ms
+        +int tamano_cola
+        +int tiempo_espera_ms
+        +decimal costo_por_instancia
+        +datetime creado_en
+        +datetime actualizado_en
     }
 
-    class ProjectEdge {
+    class ConexionProyecto {
         +bigint id
-        +bigint projectId
-        +string clientEdgeId
-        +bigint fromNodeId
-        +bigint toNodeId
-        +boolean isAsync
-        +datetime createdAt
+        +bigint proyecto_id
+        +string conexion_cliente_id
+        +bigint nodo_origen_id
+        +bigint nodo_destino_id
+        +boolean es_asincrona
+        +datetime creado_en
     }
 
-    User "1" --> "0..*" Project : owns
-    Project "1" --> "0..*" ProjectNode : contains
-    Project "1" --> "0..*" ProjectEdge : connects
+    Usuario "1" --> "0..*" Proyecto : posee
+    Proyecto "1" --> "0..*" NodoProyecto : contiene
+    Proyecto "1" --> "0..*" ConexionProyecto : conecta
 
-    ComponentCategory "1" --> "1..*" ComponentType : groups
-    ComponentType "1" --> "0..*" ProjectNode : instantiates
+    CategoriaComponente "1" --> "1..*" TipoComponente : agrupa
+    TipoComponente "1" --> "0..*" NodoProyecto : instancia
 
-    ProjectNode "1" --> "0..*" ProjectEdge : source
-    ProjectNode "1" --> "0..*" ProjectEdge : target
+    NodoProyecto "1" --> "0..*" ConexionProyecto : origen
+    NodoProyecto "1" --> "0..*" ConexionProyecto : destino

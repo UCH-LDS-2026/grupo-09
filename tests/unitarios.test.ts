@@ -1,6 +1,30 @@
 import { describe, expect, it } from "vitest";
 import { validateRegistrationPayload } from "../backend/src/services/auth.service";
-import { calculateLatency, calculateNodeCapacity, statusFor } from "../src/lib/simulator";
+import {
+  calculateLatency,
+  calculateNodeCapacity,
+  calculateNodeTrafficMetrics,
+  recommendInstancesForTraffic,
+  statusFor,
+  validateConnection,
+  type SimNode,
+} from "../src/lib/simulator";
+
+function makeTestNode(id: string, kind: SimNode["kind"]): SimNode {
+  return {
+    id,
+    kind,
+    name: id,
+    x: 0,
+    y: 0,
+    instances: 1,
+    capacity: 1,
+    baseLatency: 0,
+    queueSize: 0,
+    timeout: 0,
+    costPerInstance: 0,
+  };
+}
 
 /**
  * TESTS UNITARIOS
@@ -73,12 +97,65 @@ describe("Tests unitarios de autenticacion", () => {
   it("rechaza registrar una cuenta si el email no contiene arroba", () => {
     // Preparacion
     const payload = {
-      name: "Usuario Demo",
+      nombre: "Usuario Demo",
       email: "usuariosistema.test",
-      password: "demo1234",
+      contrasena: "demo1234",
     };
 
     // Ejecucion + verificacion
     expect(() => validateRegistrationPayload(payload)).toThrow("Ingresá un email válido.");
+  });
+});
+
+describe("Tests unitarios de reglas de negocio del simulador", () => {
+  it("calcula capacidad, carga, salida y error en un escenario normal", () => {
+    const metrics = calculateNodeTrafficMetrics({
+      trafficRps: 600,
+      instances: 2,
+      capacityPerInstance: 400,
+    });
+
+    expect(metrics.capacity).toBe(800);
+    expect(metrics.load).toBe(0.75);
+    expect(metrics.throughput).toBe(600);
+    expect(metrics.errorRate).toBe(0);
+  });
+
+  it("calcula perdida de trafico, error y estado cuando el nodo se satura", () => {
+    const metrics = calculateNodeTrafficMetrics({
+      trafficRps: 1000,
+      instances: 2,
+      capacityPerInstance: 400,
+    });
+
+    expect(metrics.capacity).toBe(800);
+    expect(metrics.throughput).toBe(800);
+    expect(metrics.dropped).toBe(200);
+    expect(metrics.errorRate).toBe(0.2);
+    expect(["saturated", "error"]).toContain(metrics.status);
+  });
+
+  it("recomienda la cantidad minima de instancias para absorber el trafico", () => {
+    const recommendedInstances = recommendInstancesForTraffic(1200, 400, 2);
+
+    expect(recommendedInstances).toBe(3);
+  });
+
+  it("permite conectar puerta de enlace API hacia balanceador de carga", () => {
+    const source = makeTestNode("gateway", "api_gateway");
+    const target = makeTestNode("balancer", "load_balancer");
+
+    const result = validateConnection(source, target, []);
+
+    expect(result.valid).toBe(true);
+  });
+
+  it("rechaza conectar base de datos hacia puerta de enlace API", () => {
+    const source = makeTestNode("database", "database");
+    const target = makeTestNode("gateway", "api_gateway");
+
+    const result = validateConnection(source, target, []);
+
+    expect(result.valid).toBe(false);
   });
 });

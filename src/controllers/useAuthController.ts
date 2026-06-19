@@ -58,6 +58,6 @@ export function useAuthController() {
     logout,
     register,
     session,
-    user: session?.user ?? null,
+    user: session?.usuario ?? null,
   };
 }

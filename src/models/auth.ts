@@ -1,23 +1,23 @@
-export type UserRole = "admin" | "architect" | "viewer";
+export type RolUsuario = "administrador" | "arquitecto" | "lector";
 
-export interface AuthUser {
+export interface UsuarioAutenticado {
   id: string;
-  name: string;
+  nombre: string;
   email: string;
-  role: UserRole;
+  rol: RolUsuario;
 }
 
 export interface LoginCredentials {
   email: string;
-  password: string;
+  contrasena: string;
 }
 
 export interface RegisterCredentials extends LoginCredentials {
-  name: string;
+  nombre: string;
 }
 
 export interface AuthSession {
-  user: AuthUser;
+  usuario: UsuarioAutenticado;
   token: string;
 }
 
