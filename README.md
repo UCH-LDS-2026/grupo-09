@@ -40,6 +40,47 @@ El frontend se organiza así:
 
 Estos son los pasos para dejar el proyecto corriendo desde cero en una Mac. Para la defensa se debe usar la rama `segundamain`.
 
+### Comandos rápidos
+
+```bash
+brew install git node mysql
+brew services start mysql
+
+git clone https://github.com/UCH-LDS-2026/grupo-09.git
+cd grupo-09
+git checkout segundamain
+git pull origin segundamain
+
+npm install
+cd backend
+npm install
+cd ..
+
+cp backend/.env.example backend/.env
+mysql -u root -p < database/schema.sql
+```
+
+Para levantar el backend:
+
+```bash
+cd backend
+npm run dev
+```
+
+Para levantar el frontend, en otra terminal desde la carpeta `grupo-09`:
+
+```bash
+npm run dev
+```
+
+Abrir:
+
+```txt
+http://localhost:8080
+```
+
+### Paso a paso
+
 1. Instalar Homebrew si no está instalado:
 
    ```bash
@@ -99,6 +140,22 @@ Estos son los pasos para dejar el proyecto corriendo desde cero en una Mac. Para
 
    Si MySQL tiene contraseña, completar `DB_PASSWORD` dentro de `backend/.env`.
 
+   Valores esperados para desarrollo local:
+
+   ```txt
+   NODE_ENV=development
+   API_PORT=3001
+   CORS_ORIGIN=http://localhost:8080
+   SESSION_SECRET=clave_larga_para_desarrollo
+   SESSION_COOKIE_NAME=softwareestres_session
+   SESSION_COOKIE_SECURE=false
+   DB_HOST=127.0.0.1
+   DB_PORT=3306
+   DB_NAME=softwareestres
+   DB_USER=root
+   DB_PASSWORD=
+   ```
+
 10. Crear la base de datos:
 
     ```bash
@@ -115,6 +172,12 @@ Estos son los pasos para dejar el proyecto corriendo desde cero en una Mac. Para
 
     ```bash
     mysql -u root -p softwareestres < database/seed-demo.sql
+    ```
+
+    Si ya existe una base creada antes de habilitar cache, aplicar la migracion:
+
+    ```bash
+    mysql -u root -p softwareestres < database/migrations/005-enable-cache-component.sql
     ```
 
 12. Levantar backend en una terminal:
@@ -152,12 +215,20 @@ Estos son los pasos para dejar el proyecto corriendo desde cero en una Mac. Para
 
 Tablas actuales:
 
-- `usuarios`: cuentas, email, contraseña hasheada y rol.
-- `proyectos`: proyectos guardados por usuario.
-- `categorias_componentes`: agrupaciones del catálogo.
-- `tipos_componentes`: tipos de nodos disponibles y valores predeterminados.
-- `nodos_proyectos`: nodos colocados en el canvas.
-- `conexiones_proyectos`: conexiones entre nodos.
+- `usuarios`: guarda las cuentas del sistema. Incluye nombre, email, contraseña hasheada y rol (`administrador`, `arquitecto` o `lector`).
+- `proyectos`: guarda cada arquitectura creada por un usuario. Incluye nombre, descripcion, slug, trafico entrante y estado de ejecucion.
+- `categorias_componentes`: agrupa visualmente los tipos de componentes del simulador, por ejemplo trafico, computo, mensajeria y almacenamiento.
+- `tipos_componentes`: define el catalogo de nodos disponibles, como puerta de enlace API, balanceador, servicio, cache, base de datos y cola. Tambien guarda valores por defecto de capacidad, latencia, cola y costo.
+- `nodos_proyectos`: guarda los componentes colocados dentro de cada proyecto, con posicion, instancias, capacidad, latencia, cola, timeout y costo.
+- `conexiones_proyectos`: guarda las conexiones entre nodos de un proyecto. Permite reconstruir el grafo de la arquitectura y ejecutar la simulacion.
+
+Relaciones principales:
+
+- Un `usuario` tiene muchos `proyectos`.
+- Un `proyecto` tiene muchos `nodos_proyectos`.
+- Un `proyecto` tiene muchas `conexiones_proyectos`.
+- Cada nodo pertenece a un `tipo_componente`.
+- Las conexiones apuntan a un nodo origen y a un nodo destino.
 
 ## Endpoints
 
@@ -206,30 +277,49 @@ Ejecutar todo:
 npm test
 npm run lint
 npm run build
+npm run security:audit
 ```
 
 Tests actuales:
 
-- `tests/unitarios.test.ts`: funciones aisladas, reglas de negocio y validación de auth.
-- `tests/integracion.test.ts`: simulación completa de una arquitectura puerta de enlace -> aplicación -> base de datos.
+- `tests/unitarios.test.ts`: prueba funciones aisladas del simulador, autenticacion y middlewares de seguridad. Verifica capacidad total de nodos, estados por carga, calculo de latencia, metricas de trafico, recomendaciones de instancias, reglas de conexion, validacion de email/contrasena, limites de dominio, CSRF y rate limit de login.
+- `tests/integracion.test.ts`: prueba el motor completo de simulacion con arquitecturas puerta de enlace API -> servicio de aplicacion -> base de datos y con cache de punta a punta. Verifica ciclos, throughput, errores, costo, nodos sin perdida, reduccion de trafico por cache y deteccion de cuello de botella.
+
+Estos tests son importantes porque validan la logica central del proyecto sin depender de la interfaz visual. Si pasan, sabemos que las reglas principales del simulador siguen funcionando aunque se modifique el frontend o el backend.
 
 Total actual:
 
 ```txt
 2 archivos
-10 tests
+19 tests
 ```
 
 ## Seguridad Aplicada
 
-- Contraseñas con PBKDF2 + salt.
-- Tokens firmados con HMAC.
-- Tokens con expiración.
-- Endpoints privados protegidos por middleware de autenticación.
-- Rate limit básico en `/api`.
-- Headers de seguridad básicos.
+- Contraseñas con PBKDF2 + salt y minimo de 10 caracteres.
+- Sesion firmada con HMAC en cookie `HttpOnly`, `SameSite=Lax` y `Secure` configurable para produccion.
+- Token CSRF obligatorio en requests con cambios cuando la autenticacion entra por cookie.
+- Endpoints privados protegidos por middleware de autenticacion y autorizacion por rol.
+- Rate limit general en `/api` y rate limit especifico para login por IP + email.
+- Headers de seguridad: CSP, `nosniff`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` y CORP.
+- Configuracion de produccion falla al iniciar si falta `SESSION_SECRET`, `CORS_ORIGIN`, password de DB o si `DB_USER=root`.
 - Errores 500 sin stack trace en respuesta HTTP.
-- Variables sensibles fuera del repositorio.
+- Variables sensibles fuera del repositorio; `.env.example` solo contiene placeholders.
+- Auditoria de dependencias con `npm run security:audit`.
+- CI en GitHub Actions con `npm ci`, lint, tests, build y auditoria de dependencias de produccion.
+- Limites de dominio para simulacion/proyectos: maximo de nodos, conexiones, trafico y valores numericos.
+
+## Checklist de produccion
+
+Antes de desplegar:
+
+1. Definir `NODE_ENV=production`.
+2. Usar un `SESSION_SECRET` privado de al menos 32 caracteres.
+3. Configurar `CORS_ORIGIN` con origenes exactos, sin `*`.
+4. Usar usuario MySQL dedicado, no `root`, con password obligatorio.
+5. Definir `SESSION_COOKIE_SECURE=true` si la API corre detras de HTTPS.
+6. Ejecutar `npm run security:audit`, `npm test`, `npm run lint` y `npm run build`.
+7. Aplicar migraciones SQL pendientes antes de levantar la API.
 
 ## Notas
 

@@ -1,17 +1,39 @@
 import { authService } from "../services/auth.service.js";
 
+function parseCookies(header = "") {
+  return Object.fromEntries(
+    header
+      .split(";")
+      .map((cookie) => cookie.trim())
+      .filter(Boolean)
+      .map((cookie) => {
+        const separatorIndex = cookie.indexOf("=");
+        if (separatorIndex === -1) return [cookie, ""];
+        return [
+          cookie.slice(0, separatorIndex),
+          decodeURIComponent(cookie.slice(separatorIndex + 1)),
+        ];
+      }),
+  );
+}
+
 export async function authMiddleware(request, _response, next) {
   try {
-    const header = request.get("authorization") ?? "";
-    const [scheme, token] = header.split(" ");
+    const cookies = parseCookies(request.get("cookie"));
+    const token = cookies[authService.cookieName];
 
-    if (scheme !== "Bearer" || !token) {
+    if (!token) {
       const error = new Error("Iniciá sesión para acceder a este recurso.");
       error.statusCode = 401;
       throw error;
     }
 
-    request.user = await authService.authenticateToken(token);
+    const session = await authService.authenticateToken(token);
+    request.user = session.usuario;
+    request.auth = {
+      csrfToken: session.csrfToken,
+      viaCookie: true,
+    };
     next();
   } catch (error) {
     next(error);

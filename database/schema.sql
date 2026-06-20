@@ -162,5 +162,5 @@ ON DUPLICATE KEY UPDATE
   activo = TRUE;
 
 UPDATE tipos_componentes
-SET activo = FALSE
+SET activo = TRUE
 WHERE codigo = 'cache';

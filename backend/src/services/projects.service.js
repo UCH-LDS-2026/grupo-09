@@ -1,5 +1,5 @@
 import { getDatabasePool } from "../config/database.js";
-import { normalizeProjectGraph } from "../../../shared/simulator-core.js";
+import { MAX_TRAFFIC_RPS, normalizeProjectGraph } from "../../../shared/simulator-core.js";
 
 const ROLES_VALIDOS = new Set(["administrador", "arquitecto", "lector"]);
 const TIPO_COMPONENTE_SIMULADOR_A_ES = {
@@ -51,7 +51,10 @@ function normalizeUser(user = {}) {
 
 function normalizeProjectPayload(payload = {}, authenticatedUser) {
   const name = String(payload.nombre ?? "Proyecto sin nombre").trim() || "Proyecto sin nombre";
-  const traffic = Math.max(0, Math.round(Number(payload.trafico ?? 600)));
+  const traffic = Math.min(
+    MAX_TRAFFIC_RPS,
+    Math.max(0, Math.round(Number(payload.trafico ?? 600))),
+  );
   const running = Boolean(payload.estaEjecutando ?? true);
   const rawNodes = payload.nodos;
   const rawEdges = payload.conexiones;

@@ -10,9 +10,9 @@ export const NODE_KINDS = new Set([
 export const ALLOWED_CONNECTIONS = {
   api_gateway: ["load_balancer", "app_service"],
   load_balancer: ["app_service"],
-  app_service: ["app_service", "database", "queue"],
+  app_service: ["app_service", "cache", "database", "queue"],
+  cache: ["database"],
   queue: ["app_service"],
-  cache: [],
   database: [],
 };
 
@@ -98,6 +98,17 @@ export const KIND_META = {
 };
 
 export const SIMULATION_CYCLES = 6;
+export const CACHE_HIT_RATE = 0.7;
+export const MAX_TRAFFIC_RPS = 1_000_000;
+export const MAX_NODES = 40;
+export const MAX_EDGES = 80;
+export const MAX_NODE_ID_LENGTH = 80;
+export const MAX_NODE_INSTANCES = 1_000;
+export const MAX_NODE_CAPACITY_RPS = 1_000_000;
+export const MAX_NODE_LATENCY_MS = 600_000;
+export const MAX_NODE_QUEUE_SIZE = 1_000_000;
+export const MAX_NODE_TIMEOUT_MS = 600_000;
+export const MAX_NODE_COST = 1_000_000;
 
 export function createHttpError(statusCode, message) {
   const error = new Error(message);
@@ -105,14 +116,16 @@ export function createHttpError(statusCode, message) {
   return error;
 }
 
-function normalizeInteger(value, fallback, min = 0) {
+function normalizeInteger(value, fallback, min = 0, max = Number.MAX_SAFE_INTEGER) {
   const parsed = Math.round(Number(value ?? fallback));
-  return Math.max(min, Number.isFinite(parsed) ? parsed : fallback);
+  const normalized = Math.max(min, Number.isFinite(parsed) ? parsed : fallback);
+  return Math.min(max, normalized);
 }
 
-function normalizeNumber(value, fallback = 0, min = 0) {
+function normalizeNumber(value, fallback = 0, min = 0, max = Number.MAX_SAFE_INTEGER) {
   const parsed = Number(value ?? fallback);
-  return Math.max(min, Number.isFinite(parsed) ? parsed : fallback);
+  const normalized = Math.max(min, Number.isFinite(parsed) ? parsed : fallback);
+  return Math.min(max, normalized);
 }
 
 export function makeNode(kind, x, y, idx = 1) {
@@ -225,6 +238,15 @@ export function normalizeProjectGraph(rawNodes, rawEdges, options = {}) {
   const requirePosition = options.requirePosition ?? false;
   const nodesInput = Array.isArray(rawNodes) ? rawNodes : [];
   const edgesInput = Array.isArray(rawEdges) ? rawEdges : [];
+
+  if (nodesInput.length > MAX_NODES) {
+    throw createHttpError(400, `El proyecto no puede tener más de ${MAX_NODES} nodos.`);
+  }
+
+  if (edgesInput.length > MAX_EDGES) {
+    throw createHttpError(400, `El proyecto no puede tener más de ${MAX_EDGES} conexiones.`);
+  }
+
   const nodeIds = new Set();
   const nodes = nodesInput.map((node, index) => {
     const id = String(node.id ?? "").trim();
@@ -235,6 +257,10 @@ export function normalizeProjectGraph(rawNodes, rawEdges, options = {}) {
 
     if (!id) {
       throw createHttpError(400, `El nodo ${index + 1} no tiene id.`);
+    }
+
+    if (id.length > MAX_NODE_ID_LENGTH) {
+      throw createHttpError(400, `El id del nodo ${index + 1} es demasiado largo.`);
     }
 
     if (nodeIds.has(id)) {
@@ -257,12 +283,12 @@ export function normalizeProjectGraph(rawNodes, rawEdges, options = {}) {
       name: name.slice(0, 120),
       x: Number.isFinite(x) ? x : 0,
       y: Number.isFinite(y) ? y : 0,
-      instances: normalizeInteger(node.instances, 1, 1),
-      capacity: normalizeInteger(node.capacity, 1, 1),
-      baseLatency: normalizeInteger(node.baseLatency, 0, 0),
-      queueSize: normalizeInteger(node.queueSize, 0, 0),
-      timeout: normalizeInteger(node.timeout, 0, 0),
-      costPerInstance: normalizeNumber(node.costPerInstance, 0, 0),
+      instances: normalizeInteger(node.instances, 1, 1, MAX_NODE_INSTANCES),
+      capacity: normalizeInteger(node.capacity, 1, 1, MAX_NODE_CAPACITY_RPS),
+      baseLatency: normalizeInteger(node.baseLatency, 0, 0, MAX_NODE_LATENCY_MS),
+      queueSize: normalizeInteger(node.queueSize, 0, 0, MAX_NODE_QUEUE_SIZE),
+      timeout: normalizeInteger(node.timeout, 0, 0, MAX_NODE_TIMEOUT_MS),
+      costPerInstance: normalizeNumber(node.costPerInstance, 0, 0, MAX_NODE_COST),
     };
   });
 
@@ -273,6 +299,10 @@ export function normalizeProjectGraph(rawNodes, rawEdges, options = {}) {
     const id = String(edge.id ?? "").trim() || `edge-${index}`;
     const from = String(edge.from ?? "").trim();
     const to = String(edge.to ?? "").trim();
+
+    if (id.length > MAX_NODE_ID_LENGTH) {
+      throw createHttpError(400, `El id de la conexión ${index + 1} es demasiado largo.`);
+    }
 
     if (edgeIds.has(id)) {
       throw createHttpError(400, `La conexión ${id} está duplicada.`);
@@ -365,6 +395,13 @@ export function recommendInstancesForTraffic(
   return Math.max(current, required);
 }
 
+export function calculateCacheMissTraffic(throughputRps, hitRate = CACHE_HIT_RATE) {
+  const throughput = Math.max(0, Number(throughputRps) || 0);
+  const normalizedHitRate = Math.min(1, Math.max(0, Number(hitRate) || 0));
+
+  return throughput * (1 - normalizedHitRate);
+}
+
 function buildFlowMaps(nodes, edges) {
   const incoming = {};
   const outgoing = {};
@@ -438,7 +475,9 @@ export function simulate(nodes, edges, trafficRps) {
       const retained = Math.min(excess, Math.max(0, node.queueSize));
       const dropped = Math.max(0, excess - retained);
       const outs = outgoing[node.id] ?? [];
-      const share = outs.length ? throughput / outs.length : 0;
+      const trafficToPropagate =
+        node.kind === "cache" ? calculateCacheMissTraffic(throughput) : throughput;
+      const share = outs.length ? trafficToPropagate / outs.length : 0;
 
       queued[node.id] = retained;
       cycleThroughput[node.id] = throughput;
@@ -544,7 +583,7 @@ export function simulate(nodes, edges, trafficRps) {
 }
 
 export function normalizeSimulationPayload(payload = {}) {
-  const traffic = normalizeInteger(payload.traffic, 0, 0);
+  const traffic = normalizeInteger(payload.traffic, 0, 0, MAX_TRAFFIC_RPS);
   const graph = normalizeProjectGraph(payload.nodes, payload.edges);
 
   return {

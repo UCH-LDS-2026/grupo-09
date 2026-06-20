@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { AuthSession, LoginCredentials, RegisterCredentials } from "@/models/auth";
 import { authService } from "@/services/authService";
 
@@ -6,6 +6,20 @@ export function useAuthController() {
   const [session, setSession] = useState<AuthSession | null>(() => authService.getSession());
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void authService.refreshSession().then((freshSession) => {
+      if (!cancelled) {
+        setSession(freshSession);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const login = async (credentials: LoginCredentials) => {
     setIsSubmitting(true);
@@ -46,7 +60,7 @@ export function useAuthController() {
   };
 
   const logout = () => {
-    authService.logout();
+    void authService.logout();
     setSession(null);
   };
 

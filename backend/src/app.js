@@ -9,7 +9,10 @@ import { securityHeadersMiddleware } from "./middlewares/security-headers.middle
 import { healthRouter } from "./routes/health.routes.js";
 import { apiRouter } from "./routes/index.js";
 
-const allowedOrigins = env.cors.origin.split(",").map((origin) => origin.trim());
+const allowedOrigins = env.cors.origin
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 function resolveCorsOrigin(origin, callback) {
   if (!origin) {
@@ -35,6 +38,8 @@ export function createApp() {
     cors({
       origin: resolveCorsOrigin,
       credentials: true,
+      methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      allowedHeaders: ["Content-Type", "Authorization", "X-CSRF-Token"],
     }),
   );
   app.use(express.json({ limit: "1mb" }));

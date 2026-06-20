@@ -147,7 +147,7 @@ export function LoginView({ error, isSubmitting, onLogin, onRegister }: LoginVie
                       id="password"
                       type={showPassword ? "text" : "password"}
                       autoComplete={isRegistering ? "new-password" : "current-password"}
-                      minLength={6}
+                      minLength={10}
                       className="h-11 pl-10 pr-11"
                       value={password}
                       onChange={(event) => setPassword(event.target.value)}

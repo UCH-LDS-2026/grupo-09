@@ -1,8 +1,6 @@
 import type { UsuarioAutenticado } from "@/models/auth";
 import type { SimEdge, SimNode } from "@/lib/simulator";
-import { authService } from "@/services/authService";
-
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001/api";
+import { requestJson } from "@/services/httpClient";
 
 export interface ProjectSummary {
   id: number;
@@ -80,26 +78,6 @@ interface ConexionDto {
 interface ProyectoDto extends ProjectSummary {
   nodos?: NodoDto[];
   conexiones?: ConexionDto[];
-}
-
-async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = authService.getToken();
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...init?.headers,
-    },
-  });
-
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    const message = body?.error?.message ?? "No se pudo completar la operación.";
-    throw new Error(message);
-  }
-
-  return response.json() as Promise<T>;
 }
 
 function mapNodoDesdeDto(nodo: NodoDto): SimNode {

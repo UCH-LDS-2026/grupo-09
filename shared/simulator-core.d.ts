@@ -75,6 +75,17 @@ export const KIND_META: Record<
   }
 >;
 export const SIMULATION_CYCLES: number;
+export const CACHE_HIT_RATE: number;
+export const MAX_TRAFFIC_RPS: number;
+export const MAX_NODES: number;
+export const MAX_EDGES: number;
+export const MAX_NODE_ID_LENGTH: number;
+export const MAX_NODE_INSTANCES: number;
+export const MAX_NODE_CAPACITY_RPS: number;
+export const MAX_NODE_LATENCY_MS: number;
+export const MAX_NODE_QUEUE_SIZE: number;
+export const MAX_NODE_TIMEOUT_MS: number;
+export const MAX_NODE_COST: number;
 
 export function createHttpError(
   statusCode: number,
@@ -110,6 +121,7 @@ export function calculateNodeTrafficMetrics(input: {
   errorRate: number;
   status: NodeStatus;
 };
+export function calculateCacheMissTraffic(throughputRps: number, hitRate?: number): number;
 export function recommendInstancesForTraffic(
   trafficRps: number,
   capacityPerInstance: number,

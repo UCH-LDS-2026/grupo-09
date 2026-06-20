@@ -1,14 +1,40 @@
 import { describe, expect, it } from "vitest";
+import { csrfMiddleware } from "../backend/src/middlewares/csrf.middleware";
+import { loginRateLimitMiddleware } from "../backend/src/middlewares/rate-limit.middleware";
 import { validateRegistrationPayload } from "../backend/src/services/auth.service";
 import {
   calculateLatency,
+  calculateCacheMissTraffic,
+  MAX_NODES,
+  MAX_TRAFFIC_RPS,
   calculateNodeCapacity,
   calculateNodeTrafficMetrics,
+  normalizeSimulationPayload,
   recommendInstancesForTraffic,
   statusFor,
   validateConnection,
   type SimNode,
 } from "../src/lib/simulator";
+
+function makeMockResponse() {
+  const headers: Record<string, string> = {};
+  return {
+    statusCode: 200,
+    body: undefined as unknown,
+    headers,
+    setHeader(name: string, value: string) {
+      headers[name] = value;
+    },
+    status(code: number) {
+      this.statusCode = code;
+      return this;
+    },
+    json(payload: unknown) {
+      this.body = payload;
+      return this;
+    },
+  };
+}
 
 function makeTestNode(id: string, kind: SimNode["kind"]): SimNode {
   return {
@@ -105,6 +131,18 @@ describe("Tests unitarios de autenticacion", () => {
     // Ejecucion + verificacion
     expect(() => validateRegistrationPayload(payload)).toThrow("Ingresá un email válido.");
   });
+
+  it("rechaza registrar una cuenta si la contrasena es demasiado corta", () => {
+    const payload = {
+      nombre: "Usuario Demo",
+      email: "usuario@sistema.test",
+      contrasena: "demo1234",
+    };
+
+    expect(() => validateRegistrationPayload(payload)).toThrow(
+      "La contraseña debe tener al menos 10 caracteres.",
+    );
+  });
 });
 
 describe("Tests unitarios de reglas de negocio del simulador", () => {
@@ -141,6 +179,32 @@ describe("Tests unitarios de reglas de negocio del simulador", () => {
     expect(recommendedInstances).toBe(3);
   });
 
+  it("calcula el trafico que sigue hacia la base despues de pasar por cache", () => {
+    expect(calculateCacheMissTraffic(1000, 0.7)).toBeCloseTo(300);
+    expect(calculateCacheMissTraffic(1000, 1)).toBe(0);
+    expect(calculateCacheMissTraffic(1000, 0)).toBe(1000);
+  });
+
+  it("limita el trafico de simulacion al maximo permitido", () => {
+    const payload = normalizeSimulationPayload({
+      traffic: MAX_TRAFFIC_RPS + 1,
+      nodes: [makeTestNode("gateway", "api_gateway")],
+      edges: [],
+    });
+
+    expect(payload.traffic).toBe(MAX_TRAFFIC_RPS);
+  });
+
+  it("rechaza grafos que superan la cantidad maxima de nodos", () => {
+    const nodes = Array.from({ length: MAX_NODES + 1 }, (_, index) =>
+      makeTestNode(`node-${index}`, "app_service"),
+    );
+
+    expect(() => normalizeSimulationPayload({ traffic: 100, nodes, edges: [] })).toThrow(
+      `El proyecto no puede tener más de ${MAX_NODES} nodos.`,
+    );
+  });
+
   it("permite conectar puerta de enlace API hacia balanceador de carga", () => {
     const source = makeTestNode("gateway", "api_gateway");
     const target = makeTestNode("balancer", "load_balancer");
@@ -150,6 +214,20 @@ describe("Tests unitarios de reglas de negocio del simulador", () => {
     expect(result.valid).toBe(true);
   });
 
+  it("permite conectar servicio de aplicacion hacia cache y cache hacia base de datos", () => {
+    const app = makeTestNode("app", "app_service");
+    const cache = makeTestNode("cache", "cache");
+    const database = makeTestNode("database", "database");
+
+    const appToCache = validateConnection(app, cache, []);
+    const cacheToDatabase = validateConnection(cache, database, [
+      { id: "e1", from: "app", to: "cache" },
+    ]);
+
+    expect(appToCache.valid).toBe(true);
+    expect(cacheToDatabase.valid).toBe(true);
+  });
+
   it("rechaza conectar base de datos hacia puerta de enlace API", () => {
     const source = makeTestNode("database", "database");
     const target = makeTestNode("gateway", "api_gateway");
@@ -157,5 +235,63 @@ describe("Tests unitarios de reglas de negocio del simulador", () => {
     const result = validateConnection(source, target, []);
 
     expect(result.valid).toBe(false);
+  });
+});
+
+describe("Tests unitarios de middlewares de seguridad", () => {
+  it("bloquea requests con cookie sin token CSRF en metodos con cambios", () => {
+    const request = {
+      method: "POST",
+      auth: { viaCookie: true, csrfToken: "csrf-valido" },
+      get: () => undefined,
+    };
+    const response = makeMockResponse();
+    const nextCalls: unknown[] = [];
+
+    csrfMiddleware(request, response, (error?: unknown) => nextCalls.push(error));
+
+    expect(nextCalls).toHaveLength(1);
+    expect(nextCalls[0]).toMatchObject({ statusCode: 403 });
+  });
+
+  it("permite requests con cookie cuando el token CSRF coincide", () => {
+    const request = {
+      method: "POST",
+      auth: { viaCookie: true, csrfToken: "csrf-valido" },
+      get: (name: string) => (name === "x-csrf-token" ? "csrf-valido" : undefined),
+    };
+    const response = makeMockResponse();
+    const nextCalls: unknown[] = [];
+
+    csrfMiddleware(request, response, (error?: unknown) => nextCalls.push(error));
+
+    expect(nextCalls).toEqual([undefined]);
+  });
+
+  it("limita intentos de login por combinacion de ip y email", () => {
+    const middleware = loginRateLimitMiddleware(60_000, 2);
+    const request = {
+      ip: "203.0.113.10",
+      socket: {},
+      body: { email: "usuario@sistema.test" },
+    };
+    const firstResponse = makeMockResponse();
+    const secondResponse = makeMockResponse();
+    const thirdResponse = makeMockResponse();
+    let nextCount = 0;
+
+    middleware(request, firstResponse, () => {
+      nextCount += 1;
+    });
+    middleware(request, secondResponse, () => {
+      nextCount += 1;
+    });
+    middleware(request, thirdResponse, () => {
+      nextCount += 1;
+    });
+
+    expect(nextCount).toBe(2);
+    expect(thirdResponse.statusCode).toBe(429);
+    expect(thirdResponse.headers["Retry-After"]).toBeDefined();
   });
 });

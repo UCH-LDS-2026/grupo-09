@@ -82,4 +82,26 @@ describe("Test de integracion del motor de simulacion", () => {
     // 6) El gateway queda saludable (carga muy baja).
     expect(result.perNode.gateway.status).toBe("healthy");
   });
+
+  it("simula cache de punta a punta reduciendo trafico hacia la base de datos", () => {
+    const nodes: SimNode[] = [
+      makeNode("gateway", "api_gateway", 2, 800, 8, 25),
+      makeNode("app", "app_service", 2, 400, 35, 40),
+      makeNode("cache", "cache", 1, 8000, 1, 30),
+      makeNode("db", "database", 1, 600, 18, 80),
+    ];
+    const edges: SimEdge[] = [
+      { id: "e1", from: "gateway", to: "app", async: false },
+      { id: "e2", from: "app", to: "cache", async: false },
+      { id: "e3", from: "cache", to: "db", async: false },
+    ];
+
+    const result = simulate(nodes, edges, 600);
+
+    expect(result.totals.errorRate).toBe(0);
+    expect(result.totals.throughput).toBe(600);
+    expect(result.perNode.cache.incoming).toBeGreaterThan(0);
+    expect(result.perNode.db.incoming).toBeLessThan(result.perNode.cache.throughput);
+    expect(result.perNode.db.incoming).toBeCloseTo(90);
+  });
 });
