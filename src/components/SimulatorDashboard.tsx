@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  DEFAULT_AVERAGE_REQUEST_SIZE_KB,
+  DEFAULT_HEAVY_REQUEST_PERCENTAGE,
+  DEFAULT_HEAVY_REQUEST_SIZE_KB,
   KIND_META,
   makeNode,
   simulate,
@@ -7,6 +10,7 @@ import {
   type NodeKind,
   type SimEdge,
   type SimNode,
+  type RequestProfile,
   type SimResult,
 } from "@/lib/simulator";
 import { NODE_ICON } from "@/lib/node-icons";
@@ -17,9 +21,6 @@ import { Label } from "@/components/ui/label";
 import {
   Save,
   Activity,
-  AlertTriangle,
-  TrendingUp,
-  CircleDollarSign,
   Zap,
   Plus,
   ChevronLeft,
@@ -44,7 +45,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ConnectionsPanel } from "@/components/simulator/ConnectionsPanel";
-import { Metric } from "@/components/simulator/Metric";
 import { PropertiesPanel } from "@/components/simulator/PropertiesPanel";
 import { ResizeHandle } from "@/components/simulator/ResizeHandle";
 import { SystemConclusion } from "@/components/simulator/SystemConclusion";
@@ -63,11 +63,83 @@ interface SimulatorDashboardProps {
   onLogout?: () => void;
 }
 
+function makeRequestProfile(
+  averageRequestSizeKb = DEFAULT_AVERAGE_REQUEST_SIZE_KB,
+): RequestProfile {
+  return {
+    averageRequestSizeKb,
+    heavyRequestPercentage: DEFAULT_HEAVY_REQUEST_PERCENTAGE,
+    heavyRequestSizeKb: averageRequestSizeKb || DEFAULT_HEAVY_REQUEST_SIZE_KB,
+  };
+}
+
+function formatRequestSize(sizeKb: number) {
+  if (sizeKb >= 1024) {
+    const value = sizeKb / 1024;
+    return value.toFixed(Number.isInteger(value) ? 0 : 1) + " MB";
+  }
+
+  return Math.round(sizeKb) + " KB";
+}
+
+function CompactSlider({
+  label,
+  value,
+  sliderValue,
+  min,
+  max,
+  step,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  sliderValue: number;
+  min: number;
+  max: number;
+  step: number;
+  disabled?: boolean;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div className="space-y-2 rounded-md bg-card/35 px-3 py-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <Label className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
+          {label}
+        </Label>
+        <span className="shrink-0 font-mono text-[11px] text-[color:var(--neon-cyan)]">
+          {value}
+        </span>
+      </div>
+      <Slider
+        value={[sliderValue]}
+        onValueChange={(nextValue) => onChange(nextValue[0])}
+        min={min}
+        max={max}
+        step={step}
+        disabled={disabled}
+      />
+    </div>
+  );
+}
+
+function CompactMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md bg-card/60 px-2 py-1.5 text-center">
+      <div className="truncate font-mono text-[8px] uppercase tracking-widest text-muted-foreground">
+        {label}
+      </div>
+      <div className="mt-0.5 truncate font-mono text-[11px] text-foreground">{value}</div>
+    </div>
+  );
+}
+
 export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboardProps) {
   const [nodes, setNodes] = useState<SimNode[]>(initialNodes);
   const [edges, setEdges] = useState<SimEdge[]>(initialEdges);
   const [selectedId, setSelectedId] = useState<string | null>("n_app");
   const [traffic, setTraffic] = useState(600);
+  const [requestProfile, setRequestProfile] = useState<RequestProfile>(() => makeRequestProfile());
   const [proyectoId, setProyectoId] = useState<number | null>(null);
   const [nombreProyecto, setNombreProyecto] = useState("plataforma-checkout.v1");
   const [connectingFromId, setConnectingFromId] = useState<string | null>(null);
@@ -140,7 +212,10 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
     document.body.style.userSelect = "none";
   };
 
-  const localResult = useMemo(() => simulate(nodes, edges, traffic), [nodes, edges, traffic]);
+  const localResult = useMemo(
+    () => simulate(nodes, edges, traffic, requestProfile),
+    [nodes, edges, traffic, requestProfile],
+  );
   const result = backendResult ?? localResult;
   const selected = nodes.find((n) => n.id === selectedId) ?? null;
   const conclusion = useMemo(
@@ -178,6 +253,7 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
             nodos: nodes,
             conexiones: edges,
             trafico: traffic,
+            ...requestProfile,
           },
           controller.signal,
         )
@@ -194,7 +270,7 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
       window.clearTimeout(timeoutId);
       controller.abort();
     };
-  }, [nodes, edges, traffic]);
+  }, [nodes, edges, traffic, requestProfile]);
 
   // ---------- Drag nodes on canvas ----------
   const onNodeMouseDown = (e: React.MouseEvent, n: SimNode) => {
@@ -341,6 +417,7 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
       setProyectoId(proyecto.id);
       setNombreProyecto(proyecto.nombre);
       setTraffic(proyecto.traficoEntranteRps);
+      setRequestProfile(makeRequestProfile(proyecto.averageRequestSizeKb));
       setNodes(proyecto.nodos);
       setEdges(proyecto.conexiones);
       setSelectedId(proyecto.nodos[0]?.id ?? null);
@@ -364,6 +441,7 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
     setNodes([]);
     setEdges([]);
     setTraffic(600);
+    setRequestProfile(makeRequestProfile());
     setSelectedId(null);
     setConnectingFromId(null);
     setPersistenceMessage("Nuevo proyecto listo.");
@@ -404,6 +482,7 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
         usuario: user,
         nombre: nombreProyectoNormalizado,
         trafico: traffic,
+        ...requestProfile,
         estaEjecutando: true,
         nodos: nodes,
         conexiones: edges,
@@ -917,61 +996,70 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
               );
             })}
 
-            {/* Control de tráfico */}
-            <div className="absolute left-3 top-3 w-[min(18rem,calc(100vw-1.5rem))] rounded-lg border border-border/60 bg-panel/80 p-3 backdrop-blur sm:left-4 sm:top-4 sm:w-72">
-              <div className="mb-2 flex items-start justify-between gap-3">
+            {/* Panel flotante de tráfico */}
+            <div className="group absolute left-3 top-3 z-20 w-[min(14rem,calc(100vw-1.5rem))] overflow-hidden rounded-lg border border-border/60 bg-panel/90 p-2.5 shadow-[var(--shadow-glow-cyan)] backdrop-blur transition-all duration-200 hover:w-[min(26rem,calc(100vw-1.5rem))] hover:p-4 sm:left-4 sm:top-4 sm:w-52 sm:hover:w-[26rem]">
+              <div className="flex items-start justify-between gap-3">
                 <div>
                   <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                    Tráfico entrante
+                    Tráfico
                   </Label>
                   <div className="mt-1 font-mono text-xs text-[color:var(--neon-cyan)]">
-                    {traffic} req/s
+                    {traffic} req/s · {formatRequestSize(requestProfile.averageRequestSizeKb)}
                   </div>
                 </div>
               </div>
-              <Slider
-                value={[traffic]}
-                onValueChange={(v) => setTraffic(v[0])}
-                min={50}
-                max={4000}
-                step={50}
-                disabled={!canEdit}
-              />
+              <div className="mt-4 grid max-h-0 gap-4 overflow-hidden px-0.5 opacity-0 transition-all duration-200 group-hover:max-h-64 group-hover:opacity-100 group-focus-within:max-h-64 group-focus-within:opacity-100 max-lg:max-h-64 max-lg:opacity-100">
+                <CompactSlider
+                  label="Requests por segundo"
+                  value={traffic + " req/s"}
+                  sliderValue={traffic}
+                  min={50}
+                  max={4000}
+                  step={50}
+                  disabled={!canEdit}
+                  onChange={(value) => setTraffic(value)}
+                />
+                <CompactSlider
+                  label="Tamaño promedio de request"
+                  value={formatRequestSize(requestProfile.averageRequestSizeKb)}
+                  sliderValue={requestProfile.averageRequestSizeKb}
+                  min={1}
+                  max={2048}
+                  step={1}
+                  disabled={!canEdit}
+                  onChange={(value) => setRequestProfile(makeRequestProfile(value))}
+                />
+              </div>
             </div>
           </div>
 
-          {/* Métricas inferiores */}
-          <div className="grid shrink-0 grid-cols-1 gap-3 border-t border-border/60 bg-panel/50 p-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
-            <Metric
-              label="Tráfico total"
-              value={`${Math.round(traffic)} req/s`}
-              icon={Zap}
-              accent="cyan"
-            />
-            <Metric
-              label="Latencia prom."
-              value={`${result.totals.avgLatency.toFixed(0)} ms`}
-              icon={Activity}
-              accent={result.totals.avgLatency > 200 ? "warn" : "cyan"}
-            />
-            <Metric
-              label="Salida procesada"
-              value={`${result.totals.throughput.toFixed(0)} r/s`}
-              icon={TrendingUp}
-              accent="violet"
-            />
-            <Metric
-              label="Tasa de error"
-              value={`${(result.totals.errorRate * 100).toFixed(1)}%`}
-              icon={AlertTriangle}
-              accent={result.totals.errorRate > 0.05 ? "warn" : "cyan"}
-            />
-            <Metric
-              label="Costo mensual est."
-              value={`$${result.totals.cost.toFixed(0)}`}
-              icon={CircleDollarSign}
-              accent="amber"
-            />
+          <div className="pointer-events-none absolute inset-x-3 bottom-52 z-20 flex justify-center lg:bottom-44 lg:justify-start lg:px-1">
+            <div className="pointer-events-auto group w-[min(100%,44rem)] overflow-hidden rounded-lg border border-border/60 bg-panel/85 p-2.5 shadow-xl backdrop-blur transition-all duration-200 hover:p-3 lg:w-36 lg:hover:w-[44rem]">
+              <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                <Activity className="h-3.5 w-3.5 text-[color:var(--neon-cyan)]" />
+                Resumen
+              </div>
+              <div className="mt-3 grid max-h-0 grid-cols-2 gap-2 overflow-hidden opacity-0 transition-all duration-200 group-hover:max-h-40 group-hover:opacity-100 group-focus-within:max-h-40 group-focus-within:opacity-100 max-lg:max-h-40 max-lg:opacity-100 sm:grid-cols-3 lg:grid-cols-6">
+                <CompactMetric label="Tráfico total" value={Math.round(traffic) + " req/s"} />
+                <CompactMetric
+                  label="Tráfico red"
+                  value={result.totals.incomingMBps.toFixed(2) + " MB/s"}
+                />
+                <CompactMetric
+                  label="Latencia prom."
+                  value={result.totals.avgLatency.toFixed(0) + " ms"}
+                />
+                <CompactMetric
+                  label="Salida"
+                  value={result.totals.throughput.toFixed(0) + " r/s"}
+                />
+                <CompactMetric
+                  label="Error"
+                  value={(result.totals.errorRate * 100).toFixed(1) + "%"}
+                />
+                <CompactMetric label="Costo" value={"$" + result.totals.cost.toFixed(0)} />
+              </div>
+            </div>
           </div>
 
           <SystemConclusion conclusion={conclusion} />

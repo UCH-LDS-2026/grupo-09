@@ -1,5 +1,5 @@
 import type { UsuarioAutenticado } from "@/models/auth";
-import type { SimEdge, SimNode } from "@/lib/simulator";
+import { KIND_META, type SimEdge, type SimNode } from "@/lib/simulator";
 import { requestJson } from "@/services/httpClient";
 
 export interface ProjectSummary {
@@ -8,6 +8,9 @@ export interface ProjectSummary {
   slug: string;
   descripcion: string | null;
   traficoEntranteRps: number;
+  averageRequestSizeKb: number;
+  heavyRequestPercentage: number;
+  heavyRequestSizeKb: number;
   estaEjecutando: boolean;
   creadoEn: string;
   actualizadoEn: string;
@@ -23,6 +26,9 @@ interface SaveProjectPayload {
   usuario: UsuarioAutenticado;
   nombre: string;
   trafico: number;
+  averageRequestSizeKb: number;
+  heavyRequestPercentage: number;
+  heavyRequestSizeKb: number;
   estaEjecutando: boolean;
   nodos: SimNode[];
   conexiones: SimEdge[];
@@ -66,6 +72,7 @@ interface NodoDto {
   tamanoCola: number;
   tiempoEsperaMs: number;
   costoPorInstancia: number;
+  anchoBandaMbps?: number;
 }
 
 interface ConexionDto {
@@ -93,6 +100,8 @@ function mapNodoDesdeDto(nodo: NodoDto): SimNode {
     queueSize: nodo.tamanoCola,
     timeout: nodo.tiempoEsperaMs,
     costPerInstance: nodo.costoPorInstancia,
+    bandwidthMbps:
+      nodo.anchoBandaMbps ?? KIND_META[TIPO_COMPONENTE_A_FRONT[nodo.tipo]].defaults.bandwidthMbps,
   };
 }
 
@@ -109,6 +118,7 @@ function mapNodoParaDto(nodo: SimNode): NodoDto {
     tamanoCola: nodo.queueSize,
     tiempoEsperaMs: nodo.timeout,
     costoPorInstancia: nodo.costPerInstance,
+    anchoBandaMbps: nodo.bandwidthMbps,
   };
 }
 
@@ -159,6 +169,9 @@ export const projectService = {
         usuario: payload.usuario,
         nombre: payload.nombre,
         trafico: payload.trafico,
+        averageRequestSizeKb: payload.averageRequestSizeKb,
+        heavyRequestPercentage: payload.heavyRequestPercentage,
+        heavyRequestSizeKb: payload.heavyRequestSizeKb,
         estaEjecutando: payload.estaEjecutando,
         nodos: payload.nodos.map(mapNodoParaDto),
         conexiones: payload.conexiones.map(mapConexionParaDto),

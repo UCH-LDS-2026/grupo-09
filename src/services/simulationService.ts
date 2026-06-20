@@ -5,6 +5,9 @@ interface RunSimulationPayload {
   nodos: SimNode[];
   conexiones: SimEdge[];
   trafico: number;
+  averageRequestSizeKb: number;
+  heavyRequestPercentage: number;
+  heavyRequestSizeKb: number;
 }
 
 const TIPO_COMPONENTE_A_BACK = {
@@ -35,6 +38,7 @@ export const simulationService = {
             tamanoCola: nodo.queueSize,
             tiempoEsperaMs: nodo.timeout,
             costoPorInstancia: nodo.costPerInstance,
+            anchoBandaMbps: nodo.bandwidthMbps,
           })),
           conexiones: payload.conexiones.map((conexion) => ({
             id: conexion.id,
@@ -43,6 +47,9 @@ export const simulationService = {
             esAsincrona: conexion.async,
           })),
           trafico: payload.trafico,
+          averageRequestSizeKb: payload.averageRequestSizeKb,
+          heavyRequestPercentage: payload.heavyRequestPercentage,
+          heavyRequestSizeKb: payload.heavyRequestSizeKb,
         }),
         signal,
       },

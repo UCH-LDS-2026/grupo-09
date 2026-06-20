@@ -38,6 +38,7 @@ function makeNode(
     queueSize: 500, // cola amplia para que no se descarte trafico
     timeout: 1000,
     costPerInstance,
+    bandwidthMbps: 1000,
   };
 }
 

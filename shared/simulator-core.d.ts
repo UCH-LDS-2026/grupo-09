@@ -7,6 +7,13 @@ export type NodeKind =
   | "queue";
 
 export type NodeStatus = "healthy" | "warning" | "high_load" | "saturated" | "error";
+export type SaturationReason = "none" | "rps" | "bandwidth" | "rps_and_bandwidth";
+
+export interface RequestProfile {
+  averageRequestSizeKb: number;
+  heavyRequestPercentage: number;
+  heavyRequestSizeKb: number;
+}
 
 export interface SimNode {
   id: string;
@@ -20,6 +27,7 @@ export interface SimNode {
   queueSize: number;
   timeout: number;
   costPerInstance: number;
+  bandwidthMbps: number;
 }
 
 export interface SimEdge {
@@ -40,6 +48,12 @@ export interface NodeMetrics {
   errorRate: number;
   status: NodeStatus;
   cost: number;
+  bandwidthMbps: number;
+  bandwidthLoad: number;
+  incomingMBps: number;
+  throughputMbps: number;
+  effectiveRequestSizeKb: number;
+  saturationReason: SaturationReason;
 }
 
 export interface CycleSnapshot {
@@ -56,6 +70,9 @@ export interface SimResult {
     avgLatency: number;
     errorRate: number;
     throughput: number;
+    incomingMBps: number;
+    throughputMbps: number;
+    effectiveRequestSizeKb: number;
     cost: number;
     cycles: number;
     bottleneck?: { id: string; name: string; reason: string };
@@ -76,6 +93,9 @@ export const KIND_META: Record<
 >;
 export const SIMULATION_CYCLES: number;
 export const CACHE_HIT_RATE: number;
+export const DEFAULT_AVERAGE_REQUEST_SIZE_KB: number;
+export const DEFAULT_HEAVY_REQUEST_PERCENTAGE: number;
+export const DEFAULT_HEAVY_REQUEST_SIZE_KB: number;
 export const MAX_TRAFFIC_RPS: number;
 export const MAX_NODES: number;
 export const MAX_EDGES: number;
@@ -86,6 +106,8 @@ export const MAX_NODE_LATENCY_MS: number;
 export const MAX_NODE_QUEUE_SIZE: number;
 export const MAX_NODE_TIMEOUT_MS: number;
 export const MAX_NODE_COST: number;
+export const MAX_NODE_BANDWIDTH_MBPS: number;
+export const MAX_REQUEST_SIZE_KB: number;
 
 export function createHttpError(
   statusCode: number,
@@ -108,17 +130,35 @@ export function normalizeProjectGraph(
 export function statusFor(load: number, errorRate?: number): NodeStatus;
 export function calculateLatency(baseLatency: number, load: number): number;
 export function calculateNodeCapacity(instances: number, capacityPerInstance: number): number;
+export function normalizeRequestProfile(profile?: Partial<RequestProfile>): RequestProfile;
+export function calculateEffectiveRequestSizeKb(profile?: Partial<RequestProfile>): number;
+export function calculateTrafficMBps(trafficRps: number, requestSizeKb: number): number;
+export function calculateBandwidthCapacityRps(bandwidthMbps: number, requestSizeKb: number): number;
+export function saturationReasonFor(input: {
+  saturatedByRps: boolean;
+  saturatedByBandwidth: boolean;
+}): SaturationReason;
 export function calculateNodeTrafficMetrics(input: {
   trafficRps: number;
   instances: number;
   capacityPerInstance: number;
+  bandwidthMbps?: number;
+  averageRequestSizeKb?: number;
+  heavyRequestPercentage?: number;
+  heavyRequestSizeKb?: number;
 }): {
   incoming: number;
   capacity: number;
+  bandwidthMbps: number;
+  bandwidthLoad: number;
+  incomingMBps: number;
+  throughputMbps: number;
+  effectiveRequestSizeKb: number;
   load: number;
   throughput: number;
   dropped: number;
   errorRate: number;
+  saturationReason: SaturationReason;
   status: NodeStatus;
 };
 export function calculateCacheMissTraffic(throughputRps: number, hitRate?: number): number;
@@ -127,9 +167,14 @@ export function recommendInstancesForTraffic(
   capacityPerInstance: number,
   currentInstances?: number,
 ): number;
-export function simulate(nodes: SimNode[], edges: SimEdge[], trafficRps: number): SimResult;
+export function simulate(
+  nodes: SimNode[],
+  edges: SimEdge[],
+  trafficRps: number,
+  requestProfile?: Partial<RequestProfile>,
+): SimResult;
 export function normalizeSimulationPayload(payload?: unknown): {
   traffic: number;
   nodes: SimNode[];
   edges: SimEdge[];
-};
+} & RequestProfile;

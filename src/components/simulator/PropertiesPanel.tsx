@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { NODE_ICON } from "@/lib/node-icons";
-import { KIND_META, type NodeMetrics, type SimNode } from "@/lib/simulator";
+import { KIND_META, type NodeMetrics, type SaturationReason, type SimNode } from "@/lib/simulator";
 
 import { STATUS_STYLES } from "./simulatorConfig";
 
@@ -25,7 +25,15 @@ type NumericNodeField =
   | "baseLatency"
   | "queueSize"
   | "timeout"
-  | "costPerInstance";
+  | "costPerInstance"
+  | "bandwidthMbps";
+
+const SATURATION_REASON_LABELS: Record<SaturationReason, string> = {
+  none: "Sin saturación",
+  rps: "RPS",
+  bandwidth: "Bandwidth",
+  rps_and_bandwidth: "RPS + bandwidth",
+};
 
 export function PropertiesPanel({
   node,
@@ -125,6 +133,16 @@ export function PropertiesPanel({
           unit="r/s"
         />
         <SliderField
+          label="Ancho de banda"
+          value={node.bandwidthMbps}
+          min={0}
+          max={2000}
+          step={10}
+          disabled={readOnly}
+          onChange={(value) => updateNumber("bandwidthMbps", value, 0)}
+          unit="Mbps"
+        />
+        <SliderField
           label="Timeout"
           value={node.timeout}
           min={0}
@@ -155,6 +173,11 @@ export function PropertiesPanel({
               <MiniMetric label="Carga" value={`${(metrics.load * 100).toFixed(0)}%`} />
               <MiniMetric label="Entrada" value={`${metrics.incoming.toFixed(0)}r/s`} />
               <MiniMetric label="Salida procesada" value={`${metrics.throughput.toFixed(0)}r/s`} />
+              <MiniMetric label="Entrada red" value={`${metrics.incomingMBps.toFixed(2)}MB/s`} />
+              <MiniMetric
+                label="Saturación"
+                value={SATURATION_REASON_LABELS[metrics.saturationReason]}
+              />
               <MiniMetric label="Cola" value={`${metrics.queued.toFixed(0)}r/s`} />
               <MiniMetric label="Error" value={`${(metrics.errorRate * 100).toFixed(1)}%`} />
               <MiniMetric label="Latencia" value={`${metrics.latency.toFixed(0)}ms`} />

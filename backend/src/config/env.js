@@ -12,6 +12,18 @@ const toNumber = (value, fallback) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const parseTrustProxy = (value) => {
+  const normalized = String(value ?? "false")
+    .trim()
+    .toLowerCase();
+
+  if (!normalized || normalized === "false" || normalized === "0") return false;
+  if (normalized === "true") return true;
+
+  const parsed = Number(normalized);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : value;
+};
+
 const nodeEnv = process.env.NODE_ENV ?? "development";
 const isProduction = nodeEnv === "production";
 const sessionSecret = process.env.SESSION_SECRET ?? DEFAULT_DEV_SESSION_SECRET;
@@ -63,6 +75,9 @@ export const env = {
   },
   cors: {
     origin: corsOrigin,
+  },
+  http: {
+    trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
   },
   auth: {
     sessionSecret,

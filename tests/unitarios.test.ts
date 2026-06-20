@@ -4,7 +4,10 @@ import { loginRateLimitMiddleware } from "../backend/src/middlewares/rate-limit.
 import { validateRegistrationPayload } from "../backend/src/services/auth.service";
 import {
   calculateLatency,
+  calculateBandwidthCapacityRps,
   calculateCacheMissTraffic,
+  calculateEffectiveRequestSizeKb,
+  calculateTrafficMBps,
   MAX_NODES,
   MAX_TRAFFIC_RPS,
   calculateNodeCapacity,
@@ -49,6 +52,7 @@ function makeTestNode(id: string, kind: SimNode["kind"]): SimNode {
     queueSize: 0,
     timeout: 0,
     costPerInstance: 0,
+    bandwidthMbps: 1000,
   };
 }
 
@@ -157,6 +161,80 @@ describe("Tests unitarios de reglas de negocio del simulador", () => {
     expect(metrics.load).toBe(0.75);
     expect(metrics.throughput).toBe(600);
     expect(metrics.errorRate).toBe(0);
+  });
+
+  it("calcula MBps correctamente con tamaño uniforme", () => {
+    const effectiveSizeKb = calculateEffectiveRequestSizeKb({
+      averageRequestSizeKb: 8,
+      heavyRequestPercentage: 0,
+      heavyRequestSizeKb: 100,
+    });
+
+    expect(effectiveSizeKb).toBe(8);
+    expect(calculateTrafficMBps(256, effectiveSizeKb)).toBe(2);
+  });
+
+  it("calcula MBps correctamente con mezcla heavy/liviano", () => {
+    const effectiveSizeKb = calculateEffectiveRequestSizeKb({
+      averageRequestSizeKb: 5,
+      heavyRequestPercentage: 20,
+      heavyRequestSizeKb: 50,
+    });
+
+    expect(effectiveSizeKb).toBe(14);
+    expect(calculateTrafficMBps(1024, effectiveSizeKb)).toBe(14);
+  });
+
+  it("satura por RPS cuando bandwidth está OK", () => {
+    const metrics = calculateNodeTrafficMetrics({
+      trafficRps: 1000,
+      instances: 1,
+      capacityPerInstance: 800,
+      bandwidthMbps: 1000,
+      averageRequestSizeKb: 5,
+    });
+
+    expect(metrics.saturationReason).toBe("rps");
+    expect(metrics.dropped).toBe(200);
+  });
+
+  it("satura por bandwidth cuando RPS está OK", () => {
+    const metrics = calculateNodeTrafficMetrics({
+      trafficRps: 100,
+      instances: 1,
+      capacityPerInstance: 1000,
+      bandwidthMbps: 10,
+      averageRequestSizeKb: 200,
+    });
+
+    expect(metrics.saturationReason).toBe("bandwidth");
+    expect(metrics.throughput).toBeCloseTo(calculateBandwidthCapacityRps(10, 200));
+  });
+
+  it("no satura cuando ambos están dentro de capacidad", () => {
+    const metrics = calculateNodeTrafficMetrics({
+      trafficRps: 100,
+      instances: 1,
+      capacityPerInstance: 1000,
+      bandwidthMbps: 100,
+      averageRequestSizeKb: 5,
+    });
+
+    expect(metrics.saturationReason).toBe("none");
+    expect(metrics.dropped).toBe(0);
+  });
+
+  it("proyecto guardado sin averageRequestSizeKb usa default y no rompe", () => {
+    const payload = normalizeSimulationPayload({
+      traffic: 100,
+      nodes: [makeTestNode("gateway", "api_gateway")],
+      edges: [],
+    });
+
+    expect(payload.averageRequestSizeKb).toBe(5);
+    expect(payload.heavyRequestPercentage).toBe(0);
+    expect(payload.heavyRequestSizeKb).toBe(50);
+    expect(payload.nodes[0].bandwidthMbps).toBe(1000);
   });
 
   it("calcula perdida de trafico, error y estado cuando el nodo se satura", () => {

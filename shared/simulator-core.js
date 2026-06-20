@@ -28,6 +28,7 @@ export const KIND_META = {
       queueSize: 100,
       timeout: 2000,
       costPerInstance: 25,
+      bandwidthMbps: 1000,
     },
   },
   load_balancer: {
@@ -41,6 +42,7 @@ export const KIND_META = {
       queueSize: 200,
       timeout: 1000,
       costPerInstance: 18,
+      bandwidthMbps: 1000,
     },
   },
   app_service: {
@@ -54,6 +56,7 @@ export const KIND_META = {
       queueSize: 100,
       timeout: 3000,
       costPerInstance: 40,
+      bandwidthMbps: 100,
     },
   },
   cache: {
@@ -67,6 +70,7 @@ export const KIND_META = {
       queueSize: 500,
       timeout: 500,
       costPerInstance: 30,
+      bandwidthMbps: 500,
     },
   },
   database: {
@@ -80,6 +84,7 @@ export const KIND_META = {
       queueSize: 200,
       timeout: 5000,
       costPerInstance: 80,
+      bandwidthMbps: 200,
     },
   },
   queue: {
@@ -93,12 +98,16 @@ export const KIND_META = {
       queueSize: 1000,
       timeout: 10000,
       costPerInstance: 20,
+      bandwidthMbps: 100,
     },
   },
 };
 
 export const SIMULATION_CYCLES = 6;
 export const CACHE_HIT_RATE = 0.7;
+export const DEFAULT_AVERAGE_REQUEST_SIZE_KB = 5;
+export const DEFAULT_HEAVY_REQUEST_PERCENTAGE = 0;
+export const DEFAULT_HEAVY_REQUEST_SIZE_KB = 50;
 export const MAX_TRAFFIC_RPS = 1_000_000;
 export const MAX_NODES = 40;
 export const MAX_EDGES = 80;
@@ -109,6 +118,8 @@ export const MAX_NODE_LATENCY_MS = 600_000;
 export const MAX_NODE_QUEUE_SIZE = 1_000_000;
 export const MAX_NODE_TIMEOUT_MS = 600_000;
 export const MAX_NODE_COST = 1_000_000;
+export const MAX_NODE_BANDWIDTH_MBPS = 1_000_000;
+export const MAX_REQUEST_SIZE_KB = 1_000_000;
 
 export function createHttpError(statusCode, message) {
   const error = new Error(message);
@@ -289,6 +300,12 @@ export function normalizeProjectGraph(rawNodes, rawEdges, options = {}) {
       queueSize: normalizeInteger(node.queueSize, 0, 0, MAX_NODE_QUEUE_SIZE),
       timeout: normalizeInteger(node.timeout, 0, 0, MAX_NODE_TIMEOUT_MS),
       costPerInstance: normalizeNumber(node.costPerInstance, 0, 0, MAX_NODE_COST),
+      bandwidthMbps: normalizeNumber(
+        node.bandwidthMbps,
+        KIND_META[kind].defaults.bandwidthMbps,
+        0,
+        MAX_NODE_BANDWIDTH_MBPS,
+      ),
     };
   });
 
@@ -364,21 +381,108 @@ export function calculateNodeCapacity(instances, capacityPerInstance) {
   return Math.max(0, Number(instances) || 0) * Math.max(0, Number(capacityPerInstance) || 0);
 }
 
-export function calculateNodeTrafficMetrics({ trafficRps, instances, capacityPerInstance }) {
+export function normalizeRequestProfile(profile = {}) {
+  return {
+    averageRequestSizeKb: normalizeNumber(
+      profile.averageRequestSizeKb,
+      DEFAULT_AVERAGE_REQUEST_SIZE_KB,
+      0,
+      MAX_REQUEST_SIZE_KB,
+    ),
+    heavyRequestPercentage: normalizeNumber(
+      profile.heavyRequestPercentage,
+      DEFAULT_HEAVY_REQUEST_PERCENTAGE,
+      0,
+      100,
+    ),
+    heavyRequestSizeKb: normalizeNumber(
+      profile.heavyRequestSizeKb,
+      DEFAULT_HEAVY_REQUEST_SIZE_KB,
+      0,
+      MAX_REQUEST_SIZE_KB,
+    ),
+  };
+}
+
+export function calculateEffectiveRequestSizeKb(profile = {}) {
+  const normalized = normalizeRequestProfile(profile);
+  const heavyFraction = normalized.heavyRequestPercentage / 100;
+
+  return (
+    normalized.averageRequestSizeKb * (1 - heavyFraction) +
+    normalized.heavyRequestSizeKb * heavyFraction
+  );
+}
+
+export function calculateTrafficMBps(trafficRps, requestSizeKb) {
+  return (Math.max(0, Number(trafficRps) || 0) * Math.max(0, Number(requestSizeKb) || 0)) / 1024;
+}
+
+export function calculateBandwidthCapacityRps(bandwidthMbps, requestSizeKb) {
+  const bandwidth = Math.max(0, Number(bandwidthMbps) || 0);
+  const size = Math.max(0, Number(requestSizeKb) || 0);
+
+  if (size === 0) return Number.POSITIVE_INFINITY;
+
+  return (bandwidth / 8) * (1024 / size);
+}
+
+export function saturationReasonFor({ saturatedByRps, saturatedByBandwidth }) {
+  if (saturatedByRps && saturatedByBandwidth) return "rps_and_bandwidth";
+  if (saturatedByRps) return "rps";
+  if (saturatedByBandwidth) return "bandwidth";
+  return "none";
+}
+
+export function calculateNodeTrafficMetrics({
+  trafficRps,
+  instances,
+  capacityPerInstance,
+  bandwidthMbps = Number.POSITIVE_INFINITY,
+  averageRequestSizeKb = DEFAULT_AVERAGE_REQUEST_SIZE_KB,
+  heavyRequestPercentage = DEFAULT_HEAVY_REQUEST_PERCENTAGE,
+  heavyRequestSizeKb = DEFAULT_HEAVY_REQUEST_SIZE_KB,
+}) {
   const incoming = Math.max(0, Number(trafficRps) || 0);
   const capacity = calculateNodeCapacity(instances, capacityPerInstance);
-  const throughput = Math.min(incoming, capacity);
+  const effectiveRequestSizeKb = calculateEffectiveRequestSizeKb({
+    averageRequestSizeKb,
+    heavyRequestPercentage,
+    heavyRequestSizeKb,
+  });
+  const incomingMBps = calculateTrafficMBps(incoming, effectiveRequestSizeKb);
+  const throughputMbps = incomingMBps * 8;
+  const bandwidthLimit = Math.max(0, Number(bandwidthMbps) || 0);
+  const bandwidthCapacity = calculateBandwidthCapacityRps(bandwidthLimit, effectiveRequestSizeKb);
+  const effectiveCapacity = Math.min(capacity, bandwidthCapacity);
+  const throughput = Math.min(incoming, effectiveCapacity);
   const dropped = Math.max(0, incoming - throughput);
-  const load = capacity > 0 ? incoming / capacity : 0;
+  const load = Math.max(
+    capacity > 0 ? incoming / capacity : 0,
+    bandwidthLimit > 0
+      ? throughputMbps / bandwidthLimit
+      : incoming > 0
+        ? Number.POSITIVE_INFINITY
+        : 0,
+  );
   const errorRate = incoming > 0 ? dropped / incoming : 0;
+  const saturatedByRps = incoming > capacity;
+  const saturatedByBandwidth = throughputMbps > bandwidthLimit;
+  const saturationReason = saturationReasonFor({ saturatedByRps, saturatedByBandwidth });
 
   return {
     incoming,
     capacity,
+    bandwidthMbps: bandwidthLimit,
+    bandwidthLoad: bandwidthLimit > 0 ? throughputMbps / bandwidthLimit : 0,
+    incomingMBps,
+    throughputMbps,
+    effectiveRequestSizeKb,
     load,
     throughput,
     dropped,
     errorRate,
+    saturationReason,
     status: statusFor(load, errorRate),
   };
 }
@@ -430,7 +534,9 @@ function findSourceNodes(nodes, incoming) {
       : nodes.slice(0, 1);
 }
 
-export function simulate(nodes, edges, trafficRps) {
+export function simulate(nodes, edges, trafficRps, requestProfile = {}) {
+  const normalizedRequestProfile = normalizeRequestProfile(requestProfile);
+  const effectiveRequestSizeKb = calculateEffectiveRequestSizeKb(normalizedRequestProfile);
   const { incoming, outgoing } = buildFlowMaps(nodes, edges);
   const sources = findSourceNodes(nodes, incoming);
   const cycleCount = SIMULATION_CYCLES;
@@ -469,8 +575,22 @@ export function simulate(nodes, edges, trafficRps) {
 
     nodes.forEach((node) => {
       const totalCapacity = Math.max(0, node.capacity * node.instances);
+      const totalBandwidthMbps = Math.max(
+        0,
+        normalizeNumber(
+          node.bandwidthMbps,
+          KIND_META[node.kind]?.defaults.bandwidthMbps ?? 100,
+          0,
+          MAX_NODE_BANDWIDTH_MBPS,
+        ) * node.instances,
+      );
+      const bandwidthCapacity = calculateBandwidthCapacityRps(
+        totalBandwidthMbps,
+        effectiveRequestSizeKb,
+      );
+      const effectiveCapacity = Math.min(totalCapacity, bandwidthCapacity);
       const totalOffered = cycleIncoming[node.id] + queued[node.id];
-      const throughput = Math.min(totalOffered, totalCapacity);
+      const throughput = Math.min(totalOffered, effectiveCapacity);
       const excess = Math.max(0, totalOffered - throughput);
       const retained = Math.min(excess, Math.max(0, node.queueSize));
       const dropped = Math.max(0, excess - retained);
@@ -520,9 +640,31 @@ export function simulate(nodes, edges, trafficRps) {
     const averageThroughput = nodeTotals.throughput / cycleCount;
     const averageQueued = nodeTotals.queued / cycleCount;
     const averageDropped = nodeTotals.dropped / cycleCount;
-    const load = totalCap > 0 ? averageIncoming / totalCap : 0;
+    const totalBandwidthMbps = Math.max(
+      0,
+      normalizeNumber(
+        node.bandwidthMbps,
+        KIND_META[node.kind]?.defaults.bandwidthMbps ?? 100,
+        0,
+        MAX_NODE_BANDWIDTH_MBPS,
+      ) * node.instances,
+    );
+    const incomingMBps = calculateTrafficMBps(averageIncoming, effectiveRequestSizeKb);
+    const throughputMBps = calculateTrafficMBps(averageThroughput, effectiveRequestSizeKb);
+    const throughputMbps = throughputMBps * 8;
+    const rpsLoad = totalCap > 0 ? averageIncoming / totalCap : 0;
+    const bandwidthLoad =
+      totalBandwidthMbps > 0
+        ? (incomingMBps * 8) / totalBandwidthMbps
+        : averageIncoming > 0
+          ? Number.POSITIVE_INFINITY
+          : 0;
+    const load = Math.max(rpsLoad, bandwidthLoad);
     const errorRate =
       averageIncoming > 0 ? Math.max(0, averageDropped) / Math.max(averageIncoming, 1) : 0;
+    const saturatedByRps = averageIncoming > totalCap;
+    const saturatedByBandwidth = incomingMBps * 8 > totalBandwidthMbps;
+    const saturationReason = saturationReasonFor({ saturatedByRps, saturatedByBandwidth });
     const latency = calculateLatency(node.baseLatency, load);
     const status = statusFor(load, errorRate);
     const cost = node.costPerInstance * node.instances;
@@ -530,6 +672,12 @@ export function simulate(nodes, edges, trafficRps) {
     perNode[node.id] = {
       incoming: averageIncoming,
       capacity: totalCap,
+      bandwidthMbps: totalBandwidthMbps,
+      bandwidthLoad,
+      incomingMBps,
+      throughputMbps,
+      effectiveRequestSizeKb,
+      saturationReason,
       load,
       throughput: averageThroughput,
       queued: averageQueued,
@@ -572,6 +720,9 @@ export function simulate(nodes, edges, trafficRps) {
       avgLatency,
       errorRate,
       throughput,
+      incomingMBps: calculateTrafficMBps(sourceTraffic, effectiveRequestSizeKb),
+      throughputMbps: calculateTrafficMBps(throughput, effectiveRequestSizeKb) * 8,
+      effectiveRequestSizeKb,
       cost: totalCost,
       cycles: cycleCount,
       bottleneck: bottleneck
@@ -585,10 +736,12 @@ export function simulate(nodes, edges, trafficRps) {
 export function normalizeSimulationPayload(payload = {}) {
   const traffic = normalizeInteger(payload.traffic, 0, 0, MAX_TRAFFIC_RPS);
   const graph = normalizeProjectGraph(payload.nodes, payload.edges);
+  const requestProfile = normalizeRequestProfile(payload);
 
   return {
     traffic,
     nodes: graph.nodes,
     edges: graph.edges,
+    ...requestProfile,
   };
 }
