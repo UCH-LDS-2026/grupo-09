@@ -1,4 +1,4 @@
-USE softwareestres;
+USE stressflow;
 
 -- Limpieza de tablas que no usa el MVP actual.
 -- El backend, frontend, tests y seed no consultan ni escriben estas tablas.

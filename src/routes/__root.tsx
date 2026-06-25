@@ -29,21 +29,21 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Simulador de arquitectura distribuida" },
+      { title: "StressFlow" },
       {
         name: "description",
         content: "Sistema MVC para disenar, simular y validar arquitecturas distribuidas.",
       },
-      { name: "author", content: "Grupo 09" },
-      { property: "og:title", content: "Simulador de arquitectura distribuida" },
+      { name: "author", content: "StressFlow" },
+      { property: "og:title", content: "StressFlow" },
       {
         property: "og:description",
         content: "Sistema MVC para disenar, simular y validar arquitecturas distribuidas.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@grupo09" },
-      { name: "twitter:title", content: "Simulador de arquitectura distribuida" },
+      { name: "twitter:site", content: "@StressFlow" },
+      { name: "twitter:title", content: "StressFlow" },
       {
         name: "twitter:description",
         content: "Sistema MVC para disenar, simular y validar arquitecturas distribuidas.",

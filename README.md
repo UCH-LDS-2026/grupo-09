@@ -46,8 +46,8 @@ Estos son los pasos para dejar el proyecto corriendo desde cero en una Mac. Para
 brew install git node mysql
 brew services start mysql
 
-git clone https://github.com/UCH-LDS-2026/grupo-09.git
-cd grupo-09
+git clone https://github.com/UCH-LDS-2026/stressflow.git
+cd stressflow
 git checkout segundamain
 git pull origin segundamain
 
@@ -67,7 +67,7 @@ cd backend
 npm run dev
 ```
 
-Para levantar el frontend, en otra terminal desde la carpeta `grupo-09`:
+Para levantar el frontend, en otra terminal desde la carpeta `stressflow`:
 
 ```bash
 npm run dev
@@ -102,13 +102,13 @@ http://localhost:8080
 4. Clonar el repositorio:
 
    ```bash
-   git clone https://github.com/UCH-LDS-2026/grupo-09.git
+   git clone https://github.com/UCH-LDS-2026/stressflow.git
    ```
 
 5. Entrar al proyecto:
 
    ```bash
-   cd grupo-09
+   cd stressflow
    ```
 
 6. Cambiar a la rama correcta:
@@ -147,11 +147,11 @@ http://localhost:8080
    API_PORT=3001
    CORS_ORIGIN=http://localhost:8080
    SESSION_SECRET=clave_larga_para_desarrollo
-   SESSION_COOKIE_NAME=softwareestres_session
+   SESSION_COOKIE_NAME=stressflow_session
    SESSION_COOKIE_SECURE=false
    DB_HOST=127.0.0.1
    DB_PORT=3306
-   DB_NAME=softwareestres
+   DB_NAME=stressflow
    DB_USER=root
    DB_PASSWORD=
    ```
@@ -171,13 +171,13 @@ http://localhost:8080
 11. Opcional: cargar datos de prueba:
 
     ```bash
-    mysql -u root -p softwareestres < database/seed-demo.sql
+    mysql -u root -p stressflow < database/seed-demo.sql
     ```
 
     Si ya existe una base creada antes de habilitar cache, aplicar la migracion:
 
     ```bash
-    mysql -u root -p softwareestres < database/migrations/005-enable-cache-component.sql
+    mysql -u root -p stressflow < database/migrations/005-enable-cache-component.sql
     ```
 
 12. Levantar backend en una terminal:
@@ -187,7 +187,7 @@ http://localhost:8080
     npm run dev
     ```
 
-13. Levantar frontend en otra terminal, desde la carpeta `grupo-09`:
+13. Levantar frontend en otra terminal, desde la carpeta `stressflow`:
 
     ```bash
     npm run dev
@@ -205,7 +205,7 @@ http://localhost:8080
     http://localhost:3001/health
     ```
 
-16. Ejecutar tests desde la carpeta `grupo-09`:
+16. Ejecutar tests desde la carpeta `stressflow`:
 
     ```bash
     npm test

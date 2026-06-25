@@ -1,8 +1,8 @@
-CREATE DATABASE IF NOT EXISTS softwareestres
+CREATE DATABASE IF NOT EXISTS stressflow
   CHARACTER SET utf8mb4
   COLLATE utf8mb4_unicode_ci;
 
-USE softwareestres;
+USE stressflow;
 
 CREATE TABLE IF NOT EXISTS usuarios (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,

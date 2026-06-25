@@ -1,4 +1,4 @@
-USE softwareestres;
+USE stressflow;
 
 UPDATE tipos_componentes
 SET activo = TRUE

@@ -1,4 +1,4 @@
-USE softwareestres;
+USE stressflow;
 
 ALTER TABLE proyectos
   ADD COLUMN average_request_size_kb DECIMAL(10,2) NOT NULL DEFAULT 5.00 AFTER trafico_entrante_rps,

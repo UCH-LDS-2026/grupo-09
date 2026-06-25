@@ -4,7 +4,7 @@ import { AppController } from "@/controllers/AppController";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Simulador de arquitectura distribuida" },
+      { title: "StressFlow" },
       {
         name: "description",
         content:

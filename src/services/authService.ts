@@ -5,7 +5,7 @@ import type {
   RegisterCredentials,
 } from "@/models/auth";
 import { API_BASE_URL } from "@/services/apiConfig";
-const SESSION_STORAGE_KEY = "softwareestres.session";
+const SESSION_STORAGE_KEY = "stressflow.session";
 
 function normalizeStoredSession(value: unknown): AuthSession | null {
   if (!value || typeof value !== "object") return null;

@@ -43,7 +43,7 @@ export function LoginView({ error, isSubmitting, onLogin, onRegister }: LoginVie
                 <Activity className="h-5 w-5 text-[color:var(--neon-cyan)]" />
               </div>
               <div>
-                <p className="text-sm font-semibold">Simulador de arquitectura distribuida</p>
+                <p className="text-sm font-semibold">StressFlow</p>
                 <p className="font-mono text-[11px] text-muted-foreground">
                   Laboratorio visual de carga
                 </p>
@@ -86,7 +86,7 @@ export function LoginView({ error, isSubmitting, onLogin, onRegister }: LoginVie
               <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-md bg-[color:var(--neon-cyan)]/15 ring-1 ring-[color:var(--neon-cyan)]/45">
                 <Activity className="h-5 w-5 text-[color:var(--neon-cyan)]" />
               </div>
-              <p className="text-sm font-semibold">Simulador de arquitectura distribuida</p>
+              <p className="text-sm font-semibold">StressFlow</p>
             </div>
 
             <div className="rounded-lg border border-border/70 bg-panel/80 p-6 shadow-[var(--shadow-glow-cyan)] backdrop-blur">

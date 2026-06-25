@@ -3,7 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const backendRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const DEFAULT_DEV_SESSION_SECRET = "softwareestres-dev-session-secret-change-in-production";
+const DEFAULT_DEV_SESSION_SECRET = "stressflow-dev-session-secret-change-in-production";
 
 config({ path: resolve(backendRoot, ".env"), quiet: true });
 
@@ -81,7 +81,7 @@ export const env = {
   },
   auth: {
     sessionSecret,
-    cookieName: process.env.SESSION_COOKIE_NAME ?? "softwareestres_session",
+    cookieName: process.env.SESSION_COOKIE_NAME ?? "stressflow_session",
     cookieSecure: isProduction
       ? process.env.SESSION_COOKIE_SECURE !== "false"
       : process.env.SESSION_COOKIE_SECURE === "true",
@@ -89,7 +89,7 @@ export const env = {
   db: {
     host: process.env.DB_HOST ?? "127.0.0.1",
     port: toNumber(process.env.DB_PORT, 3306),
-    name: process.env.DB_NAME ?? "softwareestres",
+    name: process.env.DB_NAME ?? "stressflow",
     user: dbUser,
     password: dbPassword,
   },

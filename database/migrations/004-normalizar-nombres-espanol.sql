@@ -1,4 +1,4 @@
-USE softwareestres;
+USE stressflow;
 
 -- Normaliza nombres fisicos de la base al espanol.
 -- Preserva los datos existentes y actualiza indices, claves foraneas y valores semilla.
