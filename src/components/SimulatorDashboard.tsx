@@ -60,16 +60,18 @@ import {
 
 interface SimulatorDashboardProps {
   user?: UsuarioAutenticado;
-  onLogout?: () => void;
+  onLogout?: () => void | Promise<void>;
 }
 
 function makeRequestProfile(
   averageRequestSizeKb = DEFAULT_AVERAGE_REQUEST_SIZE_KB,
+  heavyRequestPercentage = DEFAULT_HEAVY_REQUEST_PERCENTAGE,
+  heavyRequestSizeKb = DEFAULT_HEAVY_REQUEST_SIZE_KB,
 ): RequestProfile {
   return {
     averageRequestSizeKb,
-    heavyRequestPercentage: DEFAULT_HEAVY_REQUEST_PERCENTAGE,
-    heavyRequestSizeKb: averageRequestSizeKb || DEFAULT_HEAVY_REQUEST_SIZE_KB,
+    heavyRequestPercentage,
+    heavyRequestSizeKb,
   };
 }
 
@@ -417,7 +419,13 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
       setProyectoId(proyecto.id);
       setNombreProyecto(proyecto.nombre);
       setTraffic(proyecto.traficoEntranteRps);
-      setRequestProfile(makeRequestProfile(proyecto.averageRequestSizeKb));
+      setRequestProfile(
+        makeRequestProfile(
+          proyecto.averageRequestSizeKb,
+          proyecto.heavyRequestPercentage,
+          proyecto.heavyRequestSizeKb,
+        ),
+      );
       setNodes(proyecto.nodos);
       setEdges(proyecto.conexiones);
       setSelectedId(proyecto.nodos[0]?.id ?? null);

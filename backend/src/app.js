@@ -42,8 +42,8 @@ export function createApp() {
       allowedHeaders: ["Content-Type", "Authorization", "X-CSRF-Token"],
     }),
   );
-  app.use(express.json({ limit: "1mb" }));
   app.use("/api", rateLimitMiddleware());
+  app.use(express.json({ limit: "1mb" }));
 
   app.use("/health", healthRouter);
   app.use("/api", apiRouter);

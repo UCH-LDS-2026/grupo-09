@@ -18,7 +18,7 @@ const parseTrustProxy = (value) => {
     .toLowerCase();
 
   if (!normalized || normalized === "false" || normalized === "0") return false;
-  if (normalized === "true") return true;
+  if (normalized === "true") return isProduction ? false : true;
 
   const parsed = Number(normalized);
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : value;
@@ -42,6 +42,12 @@ function requireProductionSafeConfig() {
 
   if (sessionSecret.length < 32) {
     errors.push("SESSION_SECRET debe tener al menos 32 caracteres en producción.");
+  }
+
+  if (process.env.TRUST_PROXY?.trim().toLowerCase() === "true") {
+    errors.push(
+      "TRUST_PROXY no puede ser true en producción; usá un número de saltos o una subred explícita.",
+    );
   }
 
   if (!process.env.CORS_ORIGIN || !corsOrigin.trim()) {

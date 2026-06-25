@@ -1,20 +1,24 @@
 import { authService } from "../services/auth.service.js";
 
 function parseCookies(header = "") {
-  return Object.fromEntries(
-    header
-      .split(";")
-      .map((cookie) => cookie.trim())
-      .filter(Boolean)
-      .map((cookie) => {
-        const separatorIndex = cookie.indexOf("=");
-        if (separatorIndex === -1) return [cookie, ""];
-        return [
-          cookie.slice(0, separatorIndex),
-          decodeURIComponent(cookie.slice(separatorIndex + 1)),
-        ];
-      }),
-  );
+  const cookies = {};
+
+  for (const rawCookie of header.split(";")) {
+    const cookie = rawCookie.trim();
+    if (!cookie) continue;
+
+    const separatorIndex = cookie.indexOf("=");
+    const name = separatorIndex === -1 ? cookie : cookie.slice(0, separatorIndex);
+    const rawValue = separatorIndex === -1 ? "" : cookie.slice(separatorIndex + 1);
+
+    try {
+      cookies[name] = decodeURIComponent(rawValue);
+    } catch {
+      cookies[name] = rawValue;
+    }
+  }
+
+  return cookies;
 }
 
 export async function authMiddleware(request, _response, next) {

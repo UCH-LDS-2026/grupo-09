@@ -9,10 +9,17 @@ interface LoginViewProps {
   error: string | null;
   isSubmitting: boolean;
   onLogin: (credentials: LoginCredentials) => Promise<boolean>;
+  onModeChange?: () => void;
   onRegister: (credentials: RegisterCredentials) => Promise<boolean>;
 }
 
-export function LoginView({ error, isSubmitting, onLogin, onRegister }: LoginViewProps) {
+export function LoginView({
+  error,
+  isSubmitting,
+  onLogin,
+  onModeChange,
+  onRegister,
+}: LoginViewProps) {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -185,7 +192,10 @@ export function LoginView({ error, isSubmitting, onLogin, onRegister }: LoginVie
                 <button
                   type="button"
                   className="font-medium text-[color:var(--neon-cyan)] hover:underline"
-                  onClick={() => setMode(isRegistering ? "login" : "register")}
+                  onClick={() => {
+                    onModeChange?.();
+                    setMode(isRegistering ? "login" : "register");
+                  }}
                 >
                   {isRegistering ? "Iniciar sesión" : "Crear cuenta"}
                 </button>

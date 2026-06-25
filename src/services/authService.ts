@@ -5,7 +5,8 @@ import type {
   RegisterCredentials,
 } from "@/models/auth";
 import { API_BASE_URL } from "@/services/apiConfig";
-const SESSION_STORAGE_KEY = "stressflow.session";
+
+let currentSession: AuthSession | null = null;
 
 function normalizeStoredSession(value: unknown): AuthSession | null {
   if (!value || typeof value !== "object") return null;
@@ -19,14 +20,7 @@ function normalizeStoredSession(value: unknown): AuthSession | null {
 }
 
 function persistSession(session: AuthSession | null) {
-  if (typeof window === "undefined") return;
-
-  if (!session) {
-    window.localStorage.removeItem(SESSION_STORAGE_KEY);
-    return;
-  }
-
-  window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+  currentSession = session;
 }
 
 async function requestAuth(path: string, body: LoginCredentials | RegisterCredentials) {
@@ -43,6 +37,7 @@ async function requestAuth(path: string, body: LoginCredentials | RegisterCreden
     const data = await response.json().catch(() => null);
 
     if (!response.ok) {
+      persistSession(null);
       return {
         ok: false,
         error: data?.error?.message ?? "No se pudo completar la operación.",
@@ -57,6 +52,7 @@ async function requestAuth(path: string, body: LoginCredentials | RegisterCreden
 
     return { ...result, session: sesion ?? undefined };
   } catch {
+    persistSession(null);
     return {
       ok: false,
       error: "No se pudo conectar con el backend. Verificá que la API esté iniciada.",
@@ -66,23 +62,15 @@ async function requestAuth(path: string, body: LoginCredentials | RegisterCreden
 
 export const authService = {
   getSession(): AuthSession | null {
-    if (typeof window === "undefined") return null;
+    return currentSession;
+  },
 
-    try {
-      const rawSession = window.localStorage.getItem(SESSION_STORAGE_KEY);
-      if (!rawSession) return null;
-
-      const session = normalizeStoredSession(JSON.parse(rawSession));
-      persistSession(session);
-      return session;
-    } catch {
-      persistSession(null);
-      return null;
-    }
+  clearSession() {
+    persistSession(null);
   },
 
   getCsrfToken(): string | null {
-    return this.getSession()?.csrfToken ?? null;
+    return currentSession?.csrfToken ?? null;
   },
 
   async login(credentials: LoginCredentials): Promise<LoginResult> {
@@ -109,18 +97,38 @@ export const authService = {
       persistSession(session);
       return session;
     } catch {
-      return this.getSession();
+      persistSession(null);
+      return null;
     }
   },
 
-  async logout() {
+  async logout(): Promise<{ ok: boolean; error?: string }> {
     const csrfToken = this.getCsrfToken();
-    persistSession(null);
 
-    await fetch(`${API_BASE_URL}/autenticacion/logout`, {
-      method: "POST",
-      credentials: "include",
-      headers: csrfToken ? { "X-CSRF-Token": csrfToken } : undefined,
-    }).catch(() => undefined);
+    if (!csrfToken) {
+      persistSession(null);
+      return { ok: false, error: "No hay una sesión activa para cerrar." };
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/autenticacion/logout`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "X-CSRF-Token": csrfToken },
+      });
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        return {
+          ok: false,
+          error: data?.error?.message ?? "No se pudo cerrar sesión en el backend.",
+        };
+      }
+
+      persistSession(null);
+      return { ok: true };
+    } catch {
+      return { ok: false, error: "No se pudo conectar con el backend para cerrar sesión." };
+    }
   },
 };

@@ -38,7 +38,7 @@ El frontend se organiza así:
 
 ## Instalación rápida
 
-Estos son los pasos para dejar el proyecto corriendo desde cero en una Mac. Para la defensa se debe usar la rama `segundamain`.
+Estos son los pasos para dejar el proyecto corriendo desde cero en una Mac. La rama operativa principal es `main`; la rama `juan` se usa para trabajo diario y se mantiene sincronizada con `main`.
 
 ### Comandos rápidos
 
@@ -46,10 +46,10 @@ Estos son los pasos para dejar el proyecto corriendo desde cero en una Mac. Para
 brew install git node mysql
 brew services start mysql
 
-git clone https://github.com/UCH-LDS-2026/stressflow.git
+git clone https://github.com/LozanoSh/StressFlow.git
 cd stressflow
-git checkout segundamain
-git pull origin segundamain
+git checkout main
+git pull origin main
 
 npm install
 cd backend
@@ -70,6 +70,11 @@ npm run dev
 Para levantar el frontend, en otra terminal desde la carpeta `stressflow`:
 
 ```bash
+cp .env.example .env.local
+# VITE_API_URL=http://localhost:3001/api
+```
+
+```bash
 npm run dev
 ```
 
@@ -87,7 +92,7 @@ http://localhost:8080
    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
    ```
 
-2. Instalar Git, Node y MySQL:
+2. Instalar Git, Node 22.12+ y MySQL:
 
    ```bash
    brew install git node mysql
@@ -102,7 +107,7 @@ http://localhost:8080
 4. Clonar el repositorio:
 
    ```bash
-   git clone https://github.com/UCH-LDS-2026/stressflow.git
+   git clone https://github.com/LozanoSh/StressFlow.git
    ```
 
 5. Entrar al proyecto:
@@ -114,8 +119,8 @@ http://localhost:8080
 6. Cambiar a la rama correcta:
 
    ```bash
-   git checkout segundamain
-   git pull origin segundamain
+   git checkout main
+   git pull origin main
    ```
 
 7. Instalar dependencias del frontend:
@@ -140,7 +145,7 @@ http://localhost:8080
 
    Si MySQL tiene contraseña, completar `DB_PASSWORD` dentro de `backend/.env`.
 
-   Valores esperados para desarrollo local:
+   Valores esperados para desarrollo local del backend:
 
    ```txt
    NODE_ENV=development
@@ -190,6 +195,7 @@ http://localhost:8080
 13. Levantar frontend en otra terminal, desde la carpeta `stressflow`:
 
     ```bash
+    cp .env.example .env.local
     npm run dev
     ```
 
@@ -199,10 +205,11 @@ http://localhost:8080
     http://localhost:8080
     ```
 
-15. Verificar backend:
+15. Verificar backend y base de datos:
 
     ```txt
     http://localhost:3001/health
+    http://localhost:3001/api/health/db
     ```
 
 16. Ejecutar tests desde la carpeta `stressflow`:
@@ -266,7 +273,7 @@ POST http://localhost:3001/api/simulaciones/ejecutar
 Los endpoints privados requieren:
 
 ```txt
-Authorization: Bearer <token>
+Cookie HttpOnly `stressflow_session` + header `X-CSRF-Token` en requests POST/PUT/DELETE autenticados
 ```
 
 ## Tests y validaciones

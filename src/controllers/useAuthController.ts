@@ -3,7 +3,8 @@ import type { AuthSession, LoginCredentials, RegisterCredentials } from "@/model
 import { authService } from "@/services/authService";
 
 export function useAuthController() {
-  const [session, setSession] = useState<AuthSession | null>(() => authService.getSession());
+  const [session, setSession] = useState<AuthSession | null>(null);
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -13,6 +14,7 @@ export function useAuthController() {
     void authService.refreshSession().then((freshSession) => {
       if (!cancelled) {
         setSession(freshSession);
+        setIsCheckingSession(false);
       }
     });
 
@@ -59,15 +61,24 @@ export function useAuthController() {
     }
   };
 
-  const logout = () => {
-    void authService.logout();
+  const logout = async () => {
+    setError(null);
+    const result = await authService.logout();
+
+    if (!result.ok) {
+      setError(result.error ?? "No se pudo cerrar sesión.");
+      return;
+    }
+
     setSession(null);
   };
 
   return {
     error,
     isAuthenticated: Boolean(session),
+    isCheckingSession,
     isSubmitting,
+    clearError: () => setError(null),
     login,
     logout,
     register,
