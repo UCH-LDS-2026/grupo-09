@@ -46,6 +46,21 @@ La razón final queda en uno de estos valores:
 
 Para calcular cuánto puede procesar realmente el nodo, el motor toma el mínimo entre capacidad por RPS y capacidad equivalente por bandwidth. Esto permite representar el caso importante de la fase: pocos RPS con requests muy grandes pueden saturar red aunque el nodo todavía tenga capacidad de procesamiento.
 
+## Latencia progresiva
+
+La latencia parte de `baseLatency` y empieza a penalizarse cuando el nodo supera 70% de utilizacion. Entre 70% y 100% crece con una curva, no con escalones fijos. Al llegar a saturacion queda acotada en 3x para evitar valores infinitos o dificiles de defender.
+
+```txt
+if load <= 0.7:
+  latency = baseLatency
+else:
+  pressure = min(1, (load - 0.7) / 0.3)
+  multiplier = 1 + 2 * pressure^3
+  latency = baseLatency * multiplier
+```
+
+Ejemplo con `baseLatency = 20 ms`: bajo 70% se mantiene en 20 ms; cerca de 90% empieza a notarse mas; en 100% llega a 60 ms. La curva representa que los sistemas suelen degradarse lentamente al principio y mucho mas rapido cuando se acercan al limite.
+
 ## Compatibilidad
 
 Los proyectos viejos no necesitan traer estos campos. Si faltan, el motor usa los defaults anteriores y cada tipo de nodo recibe un ancho de banda predeterminado. Con `heavyRequestPercentage = 0`, el comportamiento queda alineado con el modelo previo salvo que se configure un tamaño de request o bandwidth que haga visible la nueva restricción.

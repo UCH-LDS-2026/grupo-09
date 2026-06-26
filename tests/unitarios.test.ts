@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { csrfMiddleware } from "../backend/src/middlewares/csrf.middleware";
 import { loginRateLimitMiddleware } from "../backend/src/middlewares/rate-limit.middleware";
-import { validateRegistrationPayload } from "../backend/src/services/auth.service";
+import {
+  authService,
+  safeEqualString,
+  validateRegistrationPayload,
+} from "../backend/src/services/auth.service";
 import {
   calculateLatency,
   calculateBandwidthCapacityRps,
@@ -25,8 +29,18 @@ function makeMockResponse() {
     statusCode: 200,
     body: undefined as unknown,
     headers,
+    cookies: {} as Record<string, unknown>,
+    clearedCookies: {} as Record<string, unknown>,
     setHeader(name: string, value: string) {
       headers[name] = value;
+    },
+    cookie(name: string, value: string, options: unknown) {
+      this.cookies[name] = { value, options };
+      return this;
+    },
+    clearCookie(name: string, options: unknown) {
+      this.clearedCookies[name] = options;
+      return this;
     },
     status(code: number) {
       this.statusCode = code;
@@ -105,21 +119,27 @@ describe("Tests unitarios del simulador", () => {
 
   // -------------------------------------------------------------------------
   // TEST UNITARIO 3: calculateLatency
-  // La latencia crece a medida que el nodo se carga:
-  //   load < 0.7   -> latencia base
-  //   load < 0.9   -> base * 1.5 (redondeado)
-  //   load <= 1.0  -> base * 2
-  //   load > 1.0   -> base * 3
+  // La latencia usa una curva progresiva:
+  //   load <= 0.7  -> latencia base
+  //   0.7..1.0     -> crecimiento continuo hasta 3x
+  //   load > 1.0   -> se mantiene en 3x para evitar infinitos
   // -------------------------------------------------------------------------
-  it("aumenta la latencia a medida que sube la carga", () => {
-    // Preparacion
+  it("aumenta la latencia con una curva progresiva y acotada", () => {
     const baseLatency = 20;
 
-    // Ejecucion + verificacion
-    expect(calculateLatency(baseLatency, 0.5)).toBe(20); // sin penalizacion
-    expect(calculateLatency(baseLatency, 0.8)).toBe(30); // 20 * 1.5
-    expect(calculateLatency(baseLatency, 1.0)).toBe(40); // 20 * 2
-    expect(calculateLatency(baseLatency, 1.5)).toBe(60); // 20 * 3
+    expect(calculateLatency(baseLatency, 0.5)).toBe(20);
+    expect(calculateLatency(baseLatency, 0.7)).toBe(20);
+    expect(calculateLatency(baseLatency, 0.8)).toBeGreaterThan(20);
+    expect(calculateLatency(baseLatency, 0.8)).toBeLessThan(calculateLatency(baseLatency, 0.9));
+    expect(calculateLatency(baseLatency, 0.9)).toBeLessThan(calculateLatency(baseLatency, 0.99));
+    expect(calculateLatency(baseLatency, 1.0)).toBe(60);
+    expect(calculateLatency(baseLatency, 1.5)).toBe(60);
+  });
+
+  it("normaliza entradas invalidas de latencia sin producir valores negativos", () => {
+    expect(calculateLatency(-20, 0.9)).toBe(0);
+    expect(calculateLatency(20, Number.POSITIVE_INFINITY)).toBe(60);
+    expect(calculateLatency(20, Number.NaN)).toBe(20);
   });
 });
 
@@ -316,6 +336,31 @@ describe("Tests unitarios de reglas de negocio del simulador", () => {
   });
 });
 
+describe("Tests unitarios de sesion segura", () => {
+  it("compara firmas de sesion en tiempo constante cuando tienen igual longitud", () => {
+    expect(safeEqualString("firma-valida", "firma-valida")).toBe(true);
+    expect(safeEqualString("firma-valida", "firma-falsa-")).toBe(false);
+    expect(safeEqualString("firma-valida", "corta")).toBe(false);
+  });
+
+  it("configura cookies de sesion HttpOnly y las limpia con opciones compatibles", () => {
+    const response = makeMockResponse();
+
+    authService.setSessionCookie(response, "ses.payload.firma");
+    authService.clearSessionCookie(response);
+
+    expect(response.cookies[authService.cookieName]).toMatchObject({
+      value: "ses.payload.firma",
+      options: { httpOnly: true, sameSite: "lax", path: "/" },
+    });
+    expect(response.clearedCookies[authService.cookieName]).toMatchObject({
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+    });
+    expect(response.clearedCookies[authService.cookieName]).not.toHaveProperty("maxAge");
+  });
+});
 describe("Tests unitarios de middlewares de seguridad", () => {
   it("bloquea requests con cookie sin token CSRF en metodos con cambios", () => {
     const request = {

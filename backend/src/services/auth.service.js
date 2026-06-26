@@ -115,6 +115,13 @@ function sign(value) {
   return createHmac("sha256", env.auth.sessionSecret).update(value).digest("base64url");
 }
 
+export function safeEqualString(leftValue, rightValue) {
+  const left = Buffer.from(String(leftValue ?? ""), "utf8");
+  const right = Buffer.from(String(rightValue ?? ""), "utf8");
+
+  return left.length === right.length && timingSafeEqual(left, right);
+}
+
 function publicSession(session) {
   return {
     usuario: session.usuario,
@@ -146,7 +153,7 @@ function createSession(user) {
 function parseToken(token) {
   const [prefix, payload, signature] = String(token ?? "").split(".");
 
-  if (prefix !== "ses" || !payload || !signature || sign(payload) !== signature) {
+  if (prefix !== "ses" || !payload || !signature || !safeEqualString(sign(payload), signature)) {
     throw createHttpError(401, "Sesión inválida o vencida.");
   }
 
@@ -164,14 +171,19 @@ function parseToken(token) {
   }
 }
 
-function cookieOptions() {
+function sessionCookieOptions() {
   return {
     httpOnly: true,
     secure: env.auth.cookieSecure,
-    sameSite: env.isProduction ? "lax" : "lax",
+    sameSite: "lax",
     path: "/",
     maxAge: SESSION_TTL_SECONDS * 1000,
   };
+}
+
+function clearSessionCookieOptions() {
+  const { maxAge: _maxAge, ...options } = sessionCookieOptions();
+  return options;
 }
 
 export const authService = {
@@ -181,11 +193,11 @@ export const authService = {
   publicSession,
 
   setSessionCookie(response, token) {
-    response.cookie(env.auth.cookieName, token, cookieOptions());
+    response.cookie(env.auth.cookieName, token, sessionCookieOptions());
   },
 
   clearSessionCookie(response) {
-    response.clearCookie(env.auth.cookieName, { path: "/" });
+    response.clearCookie(env.auth.cookieName, clearSessionCookieOptions());
   },
 
   async register(payload = {}) {

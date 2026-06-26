@@ -108,6 +108,10 @@ export const MAX_NODE_TIMEOUT_MS: number;
 export const MAX_NODE_COST: number;
 export const MAX_NODE_BANDWIDTH_MBPS: number;
 export const MAX_REQUEST_SIZE_KB: number;
+export const LATENCY_PENALTY_START_LOAD: number;
+export const LATENCY_PENALTY_MAX_LOAD: number;
+export const LATENCY_MAX_MULTIPLIER: number;
+export const LATENCY_CURVE_EXPONENT: number;
 
 export function createHttpError(
   statusCode: number,

@@ -120,6 +120,10 @@ export const MAX_NODE_TIMEOUT_MS = 600_000;
 export const MAX_NODE_COST = 1_000_000;
 export const MAX_NODE_BANDWIDTH_MBPS = 1_000_000;
 export const MAX_REQUEST_SIZE_KB = 1_000_000;
+export const LATENCY_PENALTY_START_LOAD = 0.7;
+export const LATENCY_PENALTY_MAX_LOAD = 1;
+export const LATENCY_MAX_MULTIPLIER = 3;
+export const LATENCY_CURVE_EXPONENT = 3;
 
 export function createHttpError(statusCode, message) {
   const error = new Error(message);
@@ -371,10 +375,20 @@ export function statusFor(load, errorRate = 0) {
 }
 
 export function calculateLatency(baseLatency, load) {
-  if (load < 0.7) return baseLatency;
-  if (load < 0.9) return Math.round(baseLatency * 1.5);
-  if (load <= 1) return Math.round(baseLatency * 2);
-  return Math.round(baseLatency * 3);
+  const base = Math.max(0, Number(baseLatency) || 0);
+  const parsedLoad = Number(load);
+  const utilization = Number.isNaN(parsedLoad) ? 0 : Math.max(0, parsedLoad);
+
+  if (utilization <= LATENCY_PENALTY_START_LOAD) return Math.round(base);
+
+  const penaltyRange = LATENCY_PENALTY_MAX_LOAD - LATENCY_PENALTY_START_LOAD;
+  const pressure = Math.min(
+    1,
+    Math.max(0, (utilization - LATENCY_PENALTY_START_LOAD) / penaltyRange),
+  );
+  const multiplier = 1 + (LATENCY_MAX_MULTIPLIER - 1) * Math.pow(pressure, LATENCY_CURVE_EXPONENT);
+
+  return Math.round(base * multiplier);
 }
 
 export function calculateNodeCapacity(instances, capacityPerInstance) {

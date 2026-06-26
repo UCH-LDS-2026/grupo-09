@@ -35,7 +35,7 @@ function mapEdgePayloadToSimulator(edge = {}) {
   };
 }
 
-function mapSimulationPayload(rawPayload = {}) {
+export function mapSimulationPayload(rawPayload = {}) {
   return {
     nodes: Array.isArray(rawPayload.nodos) ? rawPayload.nodos.map(mapNodePayloadToSimulator) : [],
     edges: Array.isArray(rawPayload.conexiones)
@@ -48,9 +48,13 @@ function mapSimulationPayload(rawPayload = {}) {
   };
 }
 
+export function normalizeBackendSimulationPayload(rawPayload = {}) {
+  return normalizeSimulationPayload(mapSimulationPayload(rawPayload));
+}
+
 export const simulationsService = {
   run(rawPayload) {
-    const payload = normalizeSimulationPayload(mapSimulationPayload(rawPayload));
+    const payload = normalizeBackendSimulationPayload(rawPayload);
     return simulate(payload.nodes, payload.edges, payload.traffic, {
       averageRequestSizeKb: payload.averageRequestSizeKb,
       heavyRequestPercentage: payload.heavyRequestPercentage,

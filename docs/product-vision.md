@@ -2,7 +2,7 @@
 
 Software Estrés ayuda a razonar sobre arquitecturas distribuidas antes de construir infraestructura real. El problema principal es que una decisión de diseño puede parecer correcta en un diagrama estático, pero fallar cuando se la mira bajo carga: un servicio puede saturarse, una cola puede acumular trabajo, una base de datos puede convertirse en cuello de botella o el costo puede crecer por cantidad de instancias.
 
-La herramienta permite modelar un flujo de componentes, configurar capacidad, latencia, colas, timeouts, instancias y costos, y ejecutar una simulación simplificada para ver throughput, error, latencia promedio, costo mensual y cuello de botella.
+La herramienta permite modelar un flujo de componentes, configurar capacidad, latencia, colas, timeouts, instancias, costos, perfil de request y ancho de banda, y ejecutar una simulación simplificada para ver throughput, error, latencia promedio, tráfico de red, costo mensual y cuello de botella.
 
 # Usuarios objetivo
 
@@ -34,7 +34,7 @@ Además, una arquitectura no se evalúa con una sola métrica. Hay que mirar car
 
 | Herramienta | Qué hace | Qué NO hace Software Estrés |
 |---|---|---|
-| Software Estrés | Modela arquitecturas como grafo, simula capacidad por componente, latencia simplificada, errores, colas, costo y cuello de botella. | No ejecuta tráfico real contra sistemas reales, no mide percentiles reales ni reemplaza observabilidad de producción. |
+| Software Estrés | Modela arquitecturas como grafo, simula capacidad por componente, latencia simplificada, errores, colas, costo, tamaño de request, ancho de banda y cuello de botella. | No ejecuta tráfico real contra sistemas reales, no mide percentiles reales ni reemplaza observabilidad de producción. |
 | k6 / JMeter | Generan carga real contra endpoints, miden respuestas reales, latencias y errores bajo prueba. | No lanza requests reales, no valida comportamiento de una API implementada ni reemplaza una prueba de performance. |
 | Grafana | Visualiza métricas reales de sistemas en ejecución, dashboards, alertas y series temporales. | No se conecta a métricas reales ni monitorea infraestructura desplegada. |
 | AWS Calculator | Estima costos de servicios cloud concretos segun configuración de proveedor. | No calcula precios reales de AWS ni modela servicios cloud con detalle comercial. |
@@ -46,5 +46,5 @@ Además, una arquitectura no se evalúa con una sola métrica. Hay que mirar car
 - El grafo debe ser dirigido y acíclico; no modela ciclos ni patrones complejos de reintentos.
 - La cache usa una tasa fija de hit rate definida en el motor, no una política real de invalidación o calentamiento.
 - Los costos son valores configurables por instancia, no precios reales de proveedores cloud.
-- No modela CPU, memoria, disco, ancho de banda ni tamaños de request como dimensiones separadas en el estado actual.
+- No modela CPU, memoria, disco, reintentos ni percentiles reales como dimensiones separadas en el estado actual.
 - No reemplaza k6, JMeter, Grafana, logs, tracing ni calculadoras cloud.
