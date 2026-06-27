@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { csrfMiddleware } from "../backend/src/middlewares/csrf.middleware";
 import { loginRateLimitMiddleware } from "../backend/src/middlewares/rate-limit.middleware";
+import { buildSystemConclusion } from "../src/components/simulator/systemConclusionLogic";
 import {
   authService,
   safeEqualString,
@@ -333,6 +334,101 @@ describe("Tests unitarios de reglas de negocio del simulador", () => {
     const result = validateConnection(source, target, []);
 
     expect(result.valid).toBe(false);
+  });
+});
+
+describe("Tests unitarios de explicación del sistema", () => {
+  it("explica saturación por bandwidth con recomendación de red", () => {
+    const node = makeTestNode("app", "app_service");
+    node.name = "App";
+    node.capacity = 1000;
+    node.bandwidthMbps = 10;
+    const result = {
+      perNode: {
+        app: {
+          incoming: 100,
+          capacity: 1000,
+          load: 1.2,
+          throughput: 80,
+          queued: 0,
+          dropped: 20,
+          latency: 0,
+          errorRate: 0.2,
+          status: "error" as const,
+          cost: 0,
+          bandwidthMbps: 10,
+          bandwidthLoad: 1.2,
+          incomingMBps: 1.5,
+          throughputMbps: 12,
+          effectiveRequestSizeKb: 20,
+          saturationReason: "bandwidth" as const,
+        },
+      },
+      totals: {
+        avgLatency: 0,
+        errorRate: 0.2,
+        throughput: 80,
+        incomingMBps: 1.5,
+        throughputMbps: 12,
+        effectiveRequestSizeKb: 20,
+        cost: 0,
+        cycles: 6,
+        bottleneck: { id: "app", name: "App", reason: "recibe demasiado tráfico de red" },
+      },
+      cycles: [],
+    };
+
+    const conclusion = buildSystemConclusion([node], result, 100);
+
+    expect(conclusion.primaryCause).toBe("ancho de banda");
+    expect(conclusion.recommendation).toContain("ancho de banda");
+    expect(conclusion.signals.find((signal) => signal.label === "Red")?.status).toBe("critical");
+  });
+
+  it("explica carga alta sin errores como advertencia accionable", () => {
+    const node = makeTestNode("app", "app_service");
+    node.name = "App";
+    node.capacity = 100;
+    const result = {
+      perNode: {
+        app: {
+          incoming: 80,
+          capacity: 100,
+          load: 0.8,
+          throughput: 80,
+          queued: 0,
+          dropped: 0,
+          latency: 35,
+          errorRate: 0,
+          status: "warning" as const,
+          cost: 0,
+          bandwidthMbps: 1000,
+          bandwidthLoad: 0.1,
+          incomingMBps: 0.4,
+          throughputMbps: 3.2,
+          effectiveRequestSizeKb: 5,
+          saturationReason: "none" as const,
+        },
+      },
+      totals: {
+        avgLatency: 35,
+        errorRate: 0,
+        throughput: 80,
+        incomingMBps: 0.4,
+        throughputMbps: 3.2,
+        effectiveRequestSizeKb: 5,
+        cost: 0,
+        cycles: 6,
+        bottleneck: { id: "app", name: "App", reason: "es el nodo activo con mayor carga (80%)" },
+      },
+      cycles: [],
+    };
+
+    const conclusion = buildSystemConclusion([node], result, 80);
+
+    expect(conclusion.accent).toBe("amber");
+    expect(conclusion.primaryCause).toBe("carga cercana al límite");
+    expect(conclusion.signals.find((signal) => signal.label === "Carga")?.status).toBe("warning");
   });
 });
 

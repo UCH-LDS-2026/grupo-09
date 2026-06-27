@@ -125,17 +125,6 @@ function CompactSlider({
   );
 }
 
-function CompactMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md bg-card/60 px-2 py-1.5 text-center">
-      <div className="truncate font-mono text-[8px] uppercase tracking-widest text-muted-foreground">
-        {label}
-      </div>
-      <div className="mt-0.5 truncate font-mono text-[11px] text-foreground">{value}</div>
-    </div>
-  );
-}
-
 export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboardProps) {
   const [nodes, setNodes] = useState<SimNode[]>(initialNodes);
   const [edges, setEdges] = useState<SimEdge[]>(initialEdges);
@@ -1037,35 +1026,6 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
                   disabled={!canEdit}
                   onChange={(value) => setRequestProfile(makeRequestProfile(value))}
                 />
-              </div>
-            </div>
-          </div>
-
-          <div className="pointer-events-none absolute inset-x-3 bottom-52 z-20 flex justify-center lg:bottom-44 lg:justify-start lg:px-1">
-            <div className="pointer-events-auto group w-[min(100%,44rem)] overflow-hidden rounded-lg border border-border/60 bg-panel/85 p-2.5 shadow-xl backdrop-blur transition-all duration-200 hover:p-3 lg:w-36 lg:hover:w-[44rem]">
-              <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                <Activity className="h-3.5 w-3.5 text-[color:var(--neon-cyan)]" />
-                Resumen
-              </div>
-              <div className="mt-3 grid max-h-0 grid-cols-2 gap-2 overflow-hidden opacity-0 transition-all duration-200 group-hover:max-h-40 group-hover:opacity-100 group-focus-within:max-h-40 group-focus-within:opacity-100 max-lg:max-h-40 max-lg:opacity-100 sm:grid-cols-3 lg:grid-cols-6">
-                <CompactMetric label="Tráfico total" value={Math.round(traffic) + " req/s"} />
-                <CompactMetric
-                  label="Tráfico red"
-                  value={result.totals.incomingMBps.toFixed(2) + " MB/s"}
-                />
-                <CompactMetric
-                  label="Latencia prom."
-                  value={result.totals.avgLatency.toFixed(0) + " ms"}
-                />
-                <CompactMetric
-                  label="Salida"
-                  value={result.totals.throughput.toFixed(0) + " r/s"}
-                />
-                <CompactMetric
-                  label="Error"
-                  value={(result.totals.errorRate * 100).toFixed(1) + "%"}
-                />
-                <CompactMetric label="Costo" value={"$" + result.totals.cost.toFixed(0)} />
               </div>
             </div>
           </div>

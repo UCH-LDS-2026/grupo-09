@@ -1,6 +1,6 @@
 # Software Estrés - Grupo 9
 
-Aplicación web para diseñar, guardar y simular arquitecturas distribuidas bajo carga. El usuario arma un flujo con componentes como puerta de enlace API, balanceadores, servicios, bases de datos y colas; el sistema calcula salida procesada, latencia, error, costo mensual y cuellos de botella.
+Aplicación web para diseñar, guardar y simular arquitecturas distribuidas bajo carga. El usuario arma un flujo con componentes como puerta de enlace API, balanceadores, servicios, bases de datos, cache y colas; el sistema calcula salida procesada, latencia progresiva, error, costo mensual, tráfico de red, saturación por RPS/bandwidth y cuellos de botella con una recomendación accionable.
 
 ## Integrantes
 
@@ -289,8 +289,8 @@ npm run security:audit
 
 Tests actuales:
 
-- `tests/unitarios.test.ts`: prueba funciones aisladas del simulador, autenticacion y middlewares de seguridad. Verifica capacidad total de nodos, estados por carga, calculo de latencia, metricas de trafico, recomendaciones de instancias, reglas de conexion, validacion de email/contrasena, limites de dominio, CSRF y rate limit de login.
-- `tests/integracion.test.ts`: prueba el motor completo de simulacion con arquitecturas puerta de enlace API -> servicio de aplicacion -> base de datos y con cache de punta a punta. Verifica ciclos, throughput, errores, costo, nodos sin perdida, reduccion de trafico por cache y deteccion de cuello de botella.
+- `tests/unitarios.test.ts`: prueba funciones aisladas del simulador, autenticacion y middlewares de seguridad. Verifica capacidad total de nodos, estados por carga, latencia progresiva, metricas de trafico/red, recomendaciones, reglas de conexion, defaults de proyectos guardados, explicacion del sistema, validacion de email/contrasena, limites de dominio, CSRF, cookies de sesion y rate limit de login.
+- `tests/integracion.test.ts`: prueba el motor completo de simulacion con arquitecturas puerta de enlace API -> servicio de aplicacion -> base de datos y con cache de punta a punta. Verifica ciclos, throughput, errores, costo, nodos sin perdida, reduccion de trafico por cache, deteccion de cuello de botella, latencia progresiva y equivalencia entre payload frontend/backend.
 
 Estos tests son importantes porque validan la logica central del proyecto sin depender de la interfaz visual. Si pasan, sabemos que las reglas principales del simulador siguen funcionando aunque se modifique el frontend o el backend.
 
@@ -298,7 +298,7 @@ Total actual:
 
 ```txt
 2 archivos
-19 tests
+33 tests
 ```
 
 ## Seguridad Aplicada

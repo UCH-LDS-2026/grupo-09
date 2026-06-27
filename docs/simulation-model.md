@@ -61,6 +61,18 @@ else:
 
 Ejemplo con `baseLatency = 20 ms`: bajo 70% se mantiene en 20 ms; cerca de 90% empieza a notarse mas; en 100% llega a 60 ms. La curva representa que los sistemas suelen degradarse lentamente al principio y mucho mas rapido cuando se acercan al limite.
 
+## Explicacion de resultados
+
+La UI toma el cuello de botella calculado por el motor y lo traduce a una conclusion accionable. Para el nodo principal muestra:
+
+- Carga: porcentaje de utilizacion del nodo.
+- Saturacion: `none`, RPS, bandwidth o ambas.
+- Cola: requests por segundo acumulados.
+- Error: porcentaje de trafico no procesado.
+- Red: entrada estimada en MB/s.
+
+La causa principal prioriza la restriccion real del recurso: si el nodo esta saturado por bandwidth, la causa se muestra como ancho de banda aunque tambien haya errores, porque esos errores son consecuencia de no poder procesar todo el trafico. La recomendacion cambia segun el caso: aumentar instancias para RPS, subir ancho de banda o bajar tamano efectivo de request para red, y aumentar capacidad antes que cola cuando el problema es acumulacion.
+
 ## Compatibilidad
 
 Los proyectos viejos no necesitan traer estos campos. Si faltan, el motor usa los defaults anteriores y cada tipo de nodo recibe un ancho de banda predeterminado. Con `heavyRequestPercentage = 0`, el comportamiento queda alineado con el modelo previo salvo que se configure un tamaño de request o bandwidth que haga visible la nueva restricción.

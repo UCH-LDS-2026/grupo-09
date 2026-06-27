@@ -28,7 +28,7 @@
 - [x] T005 Confirm baseline commands in repository root: `npm test`, `npm run build`, `npm run lint`
 - [x] T006 [P] Document accepted next phase in `docs/roadmap.md` after user approval
 - [x] T007 [P] Compare `docs/product-vision.md` with `shared/simulator-core.js` and list stale claims before editing docs
-- [ ] T008 Confirm whether database migrations in `database/migrations/` are already applied in the target environment before any persistence change
+- [x] T008 Confirm whether database migrations in `database/migrations/` are already applied in the target environment before any persistence change
 
 **Checkpoint**: Foundation ready - future user story implementation can start one phase at a time.
 
@@ -85,8 +85,8 @@
 
 - [x] T015 [US2] Replace threshold latency with a continuous formula in `shared/simulator-core.js`
 - [x] T016 [US2] Update the latency contract in `shared/simulator-core.d.ts` if return shape or helper names change
-- [ ] T017 [US2] Surface clearer bottleneck and saturation explanation in `src/components/simulator/SystemConclusion.tsx`
-- [ ] T018 [US2] Ensure node result labels in `src/components/simulator/PropertiesPanel.tsx` distinguish RPS, MB/s and Mbps
+- [x] T017 [US2] Surface clearer bottleneck and saturation explanation in `src/components/simulator/SystemConclusion.tsx`
+- [x] T018 [US2] Ensure node result labels in `src/components/simulator/PropertiesPanel.tsx` distinguish RPS, MB/s and Mbps
 - [x] T019 [US2] Document the final latency formula in `docs/simulation-model.md`
 
 **Checkpoint**: Latency behavior is continuous, tested and documented.
@@ -125,9 +125,9 @@
 ### Implementation for User Story 4
 
 - [x] T027 [P] [US4] Update stale limitation about bandwidth/request size in `docs/product-vision.md`
-- [ ] T028 [P] [US4] Update high-level capability summary in `README.md` if needed
-- [ ] T029 [US4] Update `docs/roadmap.md` to separate current, next, future and out-of-scope work
-- [ ] T030 [US4] Confirm `docs/simulation-model.md` matches `shared/simulator-core.js`
+- [x] T028 [P] [US4] Update high-level capability summary in `README.md` if needed
+- [x] T029 [US4] Update `docs/roadmap.md` to separate current, next, future and out-of-scope work
+- [x] T030 [US4] Confirm `docs/simulation-model.md` matches `shared/simulator-core.js`
 
 **Checkpoint**: Documentation is portfolio-ready and does not overstate simulator precision.
 
@@ -160,8 +160,8 @@
 - [x] T031 Run `npm test` in repository root
 - [x] T032 Run `npm run build` in repository root
 - [x] T033 Run `npm run lint` in repository root
-- [ ] T034 [P] Review `git diff` and confirm no unrelated files changed
-- [ ] T035 [P] Update the relevant Spec Kit artifact in `specs/001-roadmap-modernizacion/` with deviations found during implementation
+- [x] T034 [P] Review `git diff` and confirm no unrelated files changed
+- [x] T035 [P] Update the relevant Spec Kit artifact in `specs/001-roadmap-modernizacion/` with deviations found during implementation
 
 ---
 
