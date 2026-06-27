@@ -1,5 +1,5 @@
 import type { UsuarioAutenticado } from "@/models/auth";
-import { KIND_META, type SimEdge, type SimNode } from "@/lib/simulator";
+import { KIND_META, type SimEdge, type SimNode, type SimResult } from "@/lib/simulator";
 import { requestJson } from "@/services/httpClient";
 
 export interface ProjectSummary {
@@ -19,6 +19,37 @@ export interface ProjectSummary {
 export interface SavedProject extends ProjectSummary {
   nodos: SimNode[];
   conexiones: SimEdge[];
+}
+
+export interface VersionSnapshot {
+  schemaVersion: number;
+  nodes: SimNode[];
+  edges: SimEdge[];
+  traffic: number;
+  averageRequestSizeKb: number;
+  heavyRequestPercentage: number;
+  heavyRequestSizeKb: number;
+  result: SimResult | null;
+  [key: string]: unknown;
+}
+
+export interface ScenarioVersionSummary {
+  id: number;
+  projectId: number;
+  name: string;
+  description: string | null;
+  summary: string;
+  createdBy: string | null;
+  createdAt: string;
+  trafficRps: number;
+  nodeCount: number;
+  avgLatencyMs: number | null;
+  errorRate: number | null;
+  monthlyCost: number | null;
+}
+
+export interface ScenarioVersion extends ScenarioVersionSummary {
+  snapshot: VersionSnapshot;
 }
 
 interface SaveProjectPayload {
@@ -185,5 +216,33 @@ export const projectService = {
     await requestJson<{ eliminado: true }>(`/proyectos/${id}`, {
       method: "DELETE",
     });
+  },
+
+  async listVersions(projectId: number): Promise<ScenarioVersionSummary[]> {
+    const data = await requestJson<{ versions: ScenarioVersionSummary[] }>(
+      `/proyectos/${projectId}/versiones`,
+    );
+    return data.versions;
+  },
+
+  async createVersion(
+    projectId: number,
+    payload: { name: string; description?: string; snapshot: VersionSnapshot },
+  ): Promise<ScenarioVersionSummary> {
+    const data = await requestJson<{ version: ScenarioVersionSummary }>(
+      `/proyectos/${projectId}/versiones`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+    );
+    return data.version;
+  },
+
+  async getVersion(projectId: number, versionId: number): Promise<ScenarioVersion> {
+    const data = await requestJson<{ version: ScenarioVersion }>(
+      `/proyectos/${projectId}/versiones/${versionId}`,
+    );
+    return data.version;
   },
 };

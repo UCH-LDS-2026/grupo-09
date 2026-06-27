@@ -12,10 +12,10 @@
 
 **Purpose**: Prepare persistence, UX and contract groundwork before user-story implementation.
 
-- [ ] T001 Review `docs/database-migration-status.md` against the target environment before creating new migrations
-- [ ] T002 [P] Review `backend/src/routes/index.js` and choose route namespace for versions/reports
-- [ ] T003 [P] Review `src/services/projectService.ts` and decide frontend service boundaries for versioning/comparison/reporting
-- [ ] T004 [P] Review `shared/simulator-core.js` and confirm comparison helpers do not duplicate simulation formulas
+- [x] T001 Review `docs/database-migration-status.md` against the target environment before creating new migrations
+- [x] T002 [P] Review `backend/src/routes/index.js` and choose route namespace for versions/reports
+- [x] T003 [P] Review `src/services/projectService.ts` and decide frontend service boundaries for versioning/comparison/reporting
+- [x] T004 [P] Review `shared/simulator-core.js` and confirm comparison helpers do not duplicate simulation formulas
 
 ---
 
@@ -25,18 +25,18 @@
 
 **CRITICAL**: Do this before implementing new feature UI so the product does not become a set of disconnected panels.
 
-- [ ] T005 Review `docs/frontend-ui-ux-audit.md` and confirm the shared experience direction
-- [ ] T006 [P] Define the workspace shell: action bar plus contextual tabs in `src/components/SimulatorDashboard.tsx`
-- [ ] T007 [P] Define shared UI building blocks for executive summary, metric deltas, structural changes and model limitations in `src/components/simulator/`
-- [ ] T008 [P] Add standard empty/loading/error/success/unauthorized/stale simulation states in `src/components/SimulatorDashboard.tsx`
-- [ ] T009 [P] Add accessible labels and keyboard affordances for icon-only/canvas controls in `src/components/SimulatorDashboard.tsx`
-- [ ] T010 [P] Add reduced-motion rules for flow/glow/blink animations in `src/styles.css`
-- [ ] T011 Add confirmation UX for destructive actions in `src/components/SimulatorDashboard.tsx`
-- [ ] T012 Add confirmation UX for deleting selected components in `src/components/simulator/PropertiesPanel.tsx`
-- [ ] T013 Convert traffic controls from hover-first panel to always-discoverable scenario controls in `src/components/SimulatorDashboard.tsx`
-- [ ] T014 Add demo scenario entry point in `src/components/SimulatorDashboard.tsx`
-- [ ] T015 Normalize visible technical terminology in `src/components/simulator/PropertiesPanel.tsx` and `src/components/simulator/SystemConclusion.tsx`
-- [ ] T016 Document manual QA screenshots checklist in `docs/frontend-ui-ux-audit.md`
+- [x] T005 Review `docs/frontend-ui-ux-audit.md` and confirm the shared experience direction
+- [x] T006 [P] Define the workspace shell: action bar plus contextual tabs in `src/components/SimulatorDashboard.tsx`
+- [x] T007 [P] Define shared UI building blocks for executive summary, metric deltas, structural changes and model limitations in `src/components/simulator/`
+- [x] T008 [P] Add standard empty/loading/error/success/unauthorized/stale simulation states in `src/components/SimulatorDashboard.tsx`
+- [x] T009 [P] Add accessible labels and keyboard affordances for icon-only/canvas controls in `src/components/SimulatorDashboard.tsx`
+- [x] T010 [P] Add reduced-motion rules for flow/glow/blink animations in `src/styles.css`
+- [x] T011 Add confirmation UX for destructive actions in `src/components/SimulatorDashboard.tsx`
+- [x] T012 Add confirmation UX for deleting selected components in `src/components/simulator/PropertiesPanel.tsx`
+- [x] T013 Convert traffic controls from hover-first panel to always-discoverable scenario controls in `src/components/SimulatorDashboard.tsx`
+- [x] T014 Add demo scenario entry point in `src/components/SimulatorDashboard.tsx`
+- [x] T015 Normalize visible technical terminology in `src/components/simulator/PropertiesPanel.tsx` and `src/components/simulator/SystemConclusion.tsx`
+- [x] T016 Document manual QA screenshots checklist in `docs/frontend-ui-ux-audit.md`
 
 **Checkpoint**: The current simulator is easier to demo and ready to receive versioning/comparison/report UI.
 
@@ -46,11 +46,11 @@
 
 **Purpose**: Add schema and shared validation foundation used by all feature stories.
 
-- [ ] T017 Create migration for scenario versions in `database/migrations/007-project-scenario-versions.sql`
-- [ ] T018 Update base schema in `database/schema.sql` with scenario version table after migration design is accepted
-- [ ] T019 Add version snapshot validation/default helpers in `backend/src/services/projects.service.js` or a focused service module
-- [ ] T020 Add frontend/backend type contract for version snapshots in `src/services/projectService.ts`
-- [ ] T021 [P] Add migration/schema documentation in `docs/simulation-persistence-contract.md`
+- [x] T017 Create migration for scenario versions in `database/migrations/007-project-scenario-versions.sql`
+- [x] T018 Update base schema in `database/schema.sql` with scenario version table after migration design is accepted
+- [x] T019 Add version snapshot validation/default helpers in `backend/src/services/projects.service.js` or a focused service module
+- [x] T020 Add frontend/backend type contract for version snapshots in `src/services/projectService.ts`
+- [x] T021 [P] Add migration/schema documentation in `docs/simulation-persistence-contract.md`
 
 **Checkpoint**: Persistence shape is ready and compatible before user stories.
 
@@ -64,18 +64,18 @@
 
 ### Tests for User Story 1
 
-- [ ] T022 [P] [US1] Add unit tests for snapshot defaults and immutability in `tests/unitarios.test.ts`
-- [ ] T023 [P] [US1] Add integration tests for create/list/get version flow in `tests/integracion.test.ts`
+- [x] T022 [P] [US1] Add unit tests for snapshot defaults and immutability in `tests/unitarios.test.ts`
+- [x] T023 [P] [US1] Add integration tests for create/list/get version flow in `tests/integracion.test.ts`
 
 ### Implementation for User Story 1
 
-- [ ] T024 [US1] Implement version persistence service in `backend/src/services/project-versions.service.js`
-- [ ] T025 [US1] Implement version controller in `backend/src/controllers/project-versions.controller.js`
-- [ ] T026 [US1] Implement version routes in `backend/src/routes/project-versions.routes.js`
-- [ ] T027 [US1] Register version routes in `backend/src/routes/index.js`
-- [ ] T028 [US1] Add frontend version service methods in `src/services/projectService.ts`
-- [ ] T029 [US1] Add version history UI in `src/components/simulator/VersionHistoryPanel.tsx`
-- [ ] T030 [US1] Integrate save/open version controls into the `Escenario` shell in `src/components/SimulatorDashboard.tsx`
+- [x] T024 [US1] Implement version persistence service in `backend/src/services/project-versions.service.js`
+- [x] T025 [US1] Implement version controller in `backend/src/controllers/project-versions.controller.js`
+- [x] T026 [US1] Implement version routes in `backend/src/routes/project-versions.routes.js`
+- [x] T027 [US1] Register version routes in `backend/src/routes/index.js`
+- [x] T028 [US1] Add frontend version service methods in `src/services/projectService.ts`
+- [x] T029 [US1] Add version history UI in `src/components/simulator/VersionHistoryPanel.tsx`
+- [x] T030 [US1] Integrate save/open version controls into the `Escenario` shell in `src/components/SimulatorDashboard.tsx`
 
 **Checkpoint**: Versionado works without comparison or export.
 

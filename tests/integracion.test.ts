@@ -4,6 +4,7 @@ import {
   normalizeBackendSimulationPayload,
   simulationsService,
 } from "../backend/src/services/simulations.service";
+import { createProjectVersionsService } from "../backend/src/services/project-versions.service";
 
 /**
  * TEST DE INTEGRACION
@@ -205,5 +206,76 @@ describe("Test de integracion del contrato backend de simulacion", () => {
     expect(normalized.heavyRequestPercentage).toBe(0);
     expect(normalized.heavyRequestSizeKb).toBe(50);
     expect(normalized.nodes[0].bandwidthMbps).toBe(1000);
+  });
+});
+
+describe("Test de integracion del versionado de escenarios", () => {
+  it("crea, lista y recupera versiones inmutables del mismo proyecto", async () => {
+    const storedVersions: Array<Record<string, unknown>> = [];
+    const repository = {
+      async findOwnedProject(projectId: number, email: string) {
+        return projectId === 7 && email === "arquitecta@stressflow.test"
+          ? { id: 7, userId: 3 }
+          : null;
+      },
+      async insertVersion(version: Record<string, unknown>) {
+        const stored = {
+          ...version,
+          id: storedVersions.length + 1,
+          createdAt: new Date(`2026-06-2${storedVersions.length + 7}T10:00:00.000Z`),
+        };
+        storedVersions.push(stored);
+        return stored;
+      },
+      async listVersions(projectId: number) {
+        return storedVersions.filter((version) => version.projectId === projectId);
+      },
+      async findVersion(projectId: number, versionId: number) {
+        return (
+          storedVersions.find(
+            (version) => version.projectId === projectId && version.id === versionId,
+          ) ?? null
+        );
+      },
+    };
+    const service = createProjectVersionsService(repository);
+    const user = { email: "arquitecta@stressflow.test", nombre: "Ada", rol: "arquitecto" };
+    const baseSnapshot = {
+      nodes: [makeNode("gateway", "api_gateway", 1, 800, 8, 25)],
+      edges: [],
+      traffic: 300,
+    };
+
+    await service.createVersion(7, { name: "baseline", snapshot: baseSnapshot }, user);
+    baseSnapshot.nodes[0].capacity = 1200;
+    await service.createVersion(7, { name: "optimizada", snapshot: baseSnapshot }, user);
+
+    const versions = await service.listVersions(7, user.email);
+    const baseline = await service.getVersion(7, 1, user.email);
+
+    expect(versions.map((version) => version.name)).toEqual(["optimizada", "baseline"]);
+    expect(baseline.snapshot.nodes[0].capacity).toBe(800);
+    expect(baseline.snapshot).not.toBe(baseSnapshot);
+  });
+
+  it("bloquea el acceso a versiones de un proyecto ajeno", async () => {
+    const service = createProjectVersionsService({
+      async findOwnedProject() {
+        return null;
+      },
+      async insertVersion() {
+        throw new Error("No debe insertar");
+      },
+      async listVersions() {
+        return [];
+      },
+      async findVersion() {
+        return null;
+      },
+    });
+
+    await expect(service.listVersions(99, "otra@stressflow.test")).rejects.toMatchObject({
+      statusCode: 404,
+    });
   });
 });

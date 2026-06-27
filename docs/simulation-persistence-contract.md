@@ -1,57 +1,35 @@
-# Simulation and Persistence Contract
+# Contrato de persistencia de simulaciones
 
-Fecha: 2026-06-26
+## Versiones de escenario
 
-Este documento define como viajan los campos principales entre frontend, backend, motor compartido y base de datos. El objetivo es evitar drift cuando se agreguen nuevas dimensiones de simulacion.
+La migracion `database/migrations/007-project-scenario-versions.sql` agrega `versiones_escenarios` sobre la base seleccionada por `DB_NAME`. No incluye una sentencia `USE`, para evitar aplicar cambios en una base distinta a la configurada por el backend.
 
-## Regla General
+Cada fila pertenece a un proyecto y conserva:
 
-- El frontend nunca accede a MySQL directamente.
-- El backend recibe DTOs en español, normaliza al modelo del simulador y valida con `shared/simulator-core.js`.
-- La base de datos persiste solo datos normalizados y vinculados a `usuario_id`.
-- Si aparece un campo nuevo, debe tener default en motor compartido, mapeo frontend/backend, persistencia o una razon explicita para no persistirlo, y tests.
+- nombre y descripcion del punto de decision;
+- autor y fecha de creacion;
+- snapshot JSON completo e inmutable;
+- resumen indexable de trafico, nodos, latencia, error y costo.
 
-## Proyecto
+El snapshot usa `schemaVersion: 1`, nodos y conexiones del motor compartido, perfil de request, trafico y resultado de simulacion cuando existe. Al leerlo se vuelven a aplicar los defaults del motor para mantener compatibilidad con snapshots que no tengan campos opcionales.
 
-| Concepto | Frontend | Backend DTO | DB | Default |
-|---|---|---|---|---|
-| Nombre | `nombreProyecto` | `nombre` | `proyectos.nombre` | `Proyecto sin nombre` |
-| Trafico | `traffic` | `trafico` | `proyectos.trafico_entrante_rps` | `600` |
-| Tamaño request | `averageRequestSizeKb` | `averageRequestSizeKb` | `proyectos.average_request_size_kb` | `5` |
-| % requests pesados | `heavyRequestPercentage` | `heavyRequestPercentage` | `proyectos.heavy_request_percentage` | `0` |
-| Tamaño request pesado | `heavyRequestSizeKb` | `heavyRequestSizeKb` | `proyectos.heavy_request_size_kb` | `50` |
-| Estado ejecucion | `estaEjecutando` | `estaEjecutando` | `proyectos.esta_ejecutando` | `true` |
+## Inmutabilidad y permisos
 
-## Nodo
+La API solo expone crear, listar y abrir. No existen endpoints para actualizar o eliminar una version individual. Todas las operaciones validan que el usuario autenticado sea propietario del proyecto; el rol `lector` puede listar y abrir, pero no crear.
 
-| Concepto | Frontend `SimNode` | Backend DTO | DB | Default |
-|---|---|---|---|---|
-| Tipo | `kind` | `tipo` | `tipos_componentes.codigo` | requerido |
-| Nombre | `name` | `nombre` | `nodos_proyectos.nombre` | `Componente` |
-| Posicion | `x`, `y` | `posicionX`, `posicionY` | `posicion_x`, `posicion_y` | requerido al guardar |
-| Instancias | `instances` | `instancias` | `instancias` | por tipo |
-| Capacidad | `capacity` | `capacidadRps` | `capacidad_rps` | por tipo |
-| Latencia base | `baseLatency` | `latenciaBaseMs` | `latencia_base_ms` | por tipo |
-| Cola | `queueSize` | `tamanoCola` | `tamano_cola` | por tipo |
-| Timeout | `timeout` | `tiempoEsperaMs` | `tiempo_espera_ms` | por tipo |
-| Costo | `costPerInstance` | `costoPorInstancia` | `costo_por_instancia` | por tipo |
-| Bandwidth | `bandwidthMbps` | `anchoBandaMbps` | `ancho_banda_mbps` | por tipo |
+Eliminar el proyecto elimina sus versiones mediante `ON DELETE CASCADE`. Si se elimina el usuario autor, la version se conserva y `creado_por_usuario_id` pasa a `NULL`.
 
-## Conexion
+## Operacion
 
-| Concepto | Frontend `SimEdge` | Backend DTO | DB | Default |
-|---|---|---|---|---|
-| ID cliente | `id` | `id` | `conexion_cliente_id` | requerido |
-| Origen | `from` | `origen` | `nodo_origen_id` via nodo cliente | requerido |
-| Destino | `to` | `destino` | `nodo_destino_id` via nodo cliente | requerido |
-| Async | `async` | `esAsincrona` | `es_asincrona` | `false` |
+Antes de aplicar la migracion en otro entorno:
 
-## Validaciones Obligatorias por Cambio Futuro
+1. Confirmar `DB_NAME` y backup.
+2. Verificar que las migraciones `003` a `006` esten aplicadas.
+3. Ejecutar `007-project-scenario-versions.sql` sobre esa base.
+4. Confirmar tabla, claves foraneas e indices.
 
-1. Actualizar `shared/simulator-core.js` y `shared/simulator-core.d.ts`.
-2. Actualizar `src/services/projectService.ts` si el campo se guarda o carga.
-3. Actualizar `backend/src/services/projects.service.js` si el campo se persiste.
-4. Actualizar `backend/src/services/simulations.service.js` si el campo afecta simulacion remota.
-5. Actualizar `database/schema.sql` y migracion si se agrega columna.
-6. Agregar tests de defaults antiguos y payload nuevo.
-7. Actualizar `docs/simulation-model.md` si cambia la formula o significado.
+Rollback manual, solo si ninguna funcionalidad depende de las versiones:
+
+```sql
+DROP TABLE IF EXISTS versiones_escenarios;
+```

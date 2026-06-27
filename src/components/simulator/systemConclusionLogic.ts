@@ -13,6 +13,7 @@ export interface SystemConclusionData {
   signals: SystemSignal[];
   primaryCause: string;
   recommendation: string;
+  bottleneckName: string;
   accent: "cyan" | "amber" | "warn";
 }
 
@@ -81,6 +82,7 @@ export function buildSystemConclusion(
       signals: [],
       primaryCause: "sin topología",
       recommendation: "Agregá al menos un nodo de entrada y un componente de procesamiento.",
+      bottleneckName: "Sin topología",
       accent: "amber",
     };
   }
@@ -104,6 +106,7 @@ export function buildSystemConclusion(
       signals: [],
       primaryCause: "sin tráfico activo",
       recommendation: "Conectá el nodo de entrada hacia los servicios que querés evaluar.",
+      bottleneckName: "Sin tráfico activo",
       accent: "amber",
     };
   }
@@ -122,7 +125,7 @@ export function buildSystemConclusion(
   const primaryCause = classifyPrimaryCause(bottleneckMetrics);
   const signals = buildSignals(bottleneckMetrics);
   const scaleRecommendation = `Aumentar ${bottleneck.name} de ${bottleneck.instances} a ${recommendedInstances} instancias.`;
-  const bandwidthRecommendation = `Subir el ancho de banda de ${bottleneck.name} o bajar el tamaño efectivo de request (${bottleneckMetrics.effectiveRequestSizeKb.toFixed(1)} KB).`;
+  const bandwidthRecommendation = `Subir el ancho de banda de ${bottleneck.name} o bajar el tamaño efectivo de solicitud (${bottleneckMetrics.effectiveRequestSizeKb.toFixed(1)} KB).`;
   const queueRecommendation = `Aumentar capacidad de procesamiento antes de agrandar la cola; la cola solo posterga el cuello de botella.`;
   const recommendation =
     bottleneckMetrics.saturationReason === "bandwidth"
@@ -148,6 +151,7 @@ export function buildSystemConclusion(
       signals,
       primaryCause,
       recommendation,
+      bottleneckName: bottleneck.name,
       accent: "warn",
     };
   }
@@ -166,6 +170,7 @@ export function buildSystemConclusion(
     signals,
     primaryCause,
     recommendation,
+    bottleneckName: bottleneck.name,
     accent: bottleneckMetrics.load >= 0.7 ? "amber" : "cyan",
   };
 }

@@ -83,9 +83,10 @@ No se detectaron bloqueantes visuales que impidan seguir usando el producto actu
    - Mejora: agregar estado visible de calculo y bloquear/advertir informe cuando el resultado no fue recalculado de forma confiable.
 
 10. **Accesibilidad parcial: buenos inputs, pero faltan nombres y alternativas en controles icon-only**
-   - Evidencia: login tiene labels correctos y `aria-label` para password en `LoginView.tsx:117-170`; toggles laterales usan `title` pero no `aria-label` en `SimulatorDashboard.tsx:1079-1094`; menu de tres puntos no tiene etiqueta visible/aria en `SimulatorDashboard.tsx:647-651`.
-   - Impacto: lectores de pantalla y navegacion por teclado quedan debiles.
-   - Mejora: agregar `aria-label`, focus visible consistente, roles/labels en canvas y controles de conexion.
+
+- Evidencia: login tiene labels correctos y `aria-label` para password en `LoginView.tsx:117-170`; toggles laterales usan `title` pero no `aria-label` en `SimulatorDashboard.tsx:1079-1094`; menu de tres puntos no tiene etiqueta visible/aria en `SimulatorDashboard.tsx:647-651`.
+- Impacto: lectores de pantalla y navegacion por teclado quedan debiles.
+- Mejora: agregar `aria-label`, focus visible consistente, roles/labels en canvas y controles de conexion.
 
 ### P2 - Pulido visual y consistencia
 
@@ -180,3 +181,17 @@ Criterio de cierre: el informe se puede abrir o imprimir y defender sin explicar
 ## Decision de producto
 
 La proxima implementacion no deberia empezar directo por tablas de versionado. Primero conviene ejecutar la compuerta UI/UX: experiencia shell, demo, confirmaciones, accesibilidad base y plan visual para versionado/comparacion/informe. Eso evita que las tres mejoras queden pegadas como botones sueltos.
+
+## Checklist manual de cierre - Fase de versionado
+
+Registrar evidencia visual sin datos sensibles para cada viewport:
+
+- [ ] Desktop 1440x900: barra contextual, canvas, controles de trafico y panel de propiedades sin solaparse.
+- [ ] Laptop 1280x720: biblioteca y panel contextual redimensionables; canvas utilizable.
+- [ ] Tablet 768x1024: biblioteca horizontal, tabs accesibles y panel contextual debajo del canvas.
+- [ ] Mobile 390x844: acciones envuelven sin recorte, tabs tienen scroll y controles no salen del viewport.
+- [ ] Teclado: componentes de biblioteca y nodos se seleccionan con Enter/Espacio; botones icon-only tienen nombre accesible.
+- [ ] Reduced motion: flujo, pulso y alertas quedan estaticos con `prefers-reduced-motion: reduce`.
+- [ ] Destructivas: borrar proyecto, limpiar canvas y eliminar componente requieren confirmacion.
+- [ ] Versionado: estado vacio, carga, error, creacion exitosa y vista historica de solo lectura son distinguibles.
+- [ ] Motor: se diferencia backend, fallback local, recalculo y snapshot historico.

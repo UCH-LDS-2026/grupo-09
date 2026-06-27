@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { csrfMiddleware } from "../backend/src/middlewares/csrf.middleware";
 import { loginRateLimitMiddleware } from "../backend/src/middlewares/rate-limit.middleware";
 import { buildSystemConclusion } from "../src/components/simulator/systemConclusionLogic";
+import { normalizeVersionSnapshot } from "../backend/src/services/project-snapshots.service";
 import {
   authService,
   safeEqualString,
@@ -167,6 +168,61 @@ describe("Tests unitarios de autenticacion", () => {
     expect(() => validateRegistrationPayload(payload)).toThrow(
       "La contraseña debe tener al menos 10 caracteres.",
     );
+  });
+});
+
+describe("Tests unitarios de snapshots de escenario", () => {
+  it("aplica defaults compatibles a snapshots anteriores", () => {
+    const snapshot = normalizeVersionSnapshot({
+      nodes: [
+        {
+          id: "gateway",
+          kind: "api_gateway",
+          name: "Gateway",
+          x: 10,
+          y: 20,
+          instances: 1,
+          capacity: 800,
+          baseLatency: 8,
+          queueSize: 100,
+          timeout: 2000,
+          costPerInstance: 25,
+        },
+      ],
+      edges: [],
+      traffic: 200,
+    });
+
+    expect(snapshot.schemaVersion).toBe(1);
+    expect(snapshot.averageRequestSizeKb).toBe(5);
+    expect(snapshot.heavyRequestPercentage).toBe(0);
+    expect(snapshot.heavyRequestSizeKb).toBe(50);
+    expect(snapshot.nodes[0].bandwidthMbps).toBe(1000);
+    expect(snapshot.result).toBeNull();
+  });
+
+  it("rechaza snapshots sin componentes", () => {
+    expect(() => normalizeVersionSnapshot({ nodes: [], edges: [], traffic: 100 })).toThrow(
+      "El snapshot debe tener al menos un nodo.",
+    );
+  });
+
+  it("crea una copia profunda inmutable sin compartir referencias", () => {
+    const input = {
+      nodes: [makeTestNode("gateway", "api_gateway")],
+      edges: [],
+      traffic: 100,
+      result: { totals: { throughput: 100 } },
+    };
+
+    const snapshot = normalizeVersionSnapshot(input);
+    input.nodes[0].name = "Mutado";
+    input.result.totals.throughput = 0;
+
+    expect(snapshot.nodes[0].name).toBe("gateway");
+    expect(snapshot.result?.totals.throughput).toBe(100);
+    expect(Object.isFrozen(snapshot)).toBe(true);
+    expect(Object.isFrozen(snapshot.nodes[0])).toBe(true);
   });
 });
 
@@ -381,6 +437,7 @@ describe("Tests unitarios de explicación del sistema", () => {
     const conclusion = buildSystemConclusion([node], result, 100);
 
     expect(conclusion.primaryCause).toBe("ancho de banda");
+    expect(conclusion.bottleneckName).toBe("App");
     expect(conclusion.recommendation).toContain("ancho de banda");
     expect(conclusion.signals.find((signal) => signal.label === "Red")?.status).toBe("critical");
   });
