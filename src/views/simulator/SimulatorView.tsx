@@ -3,7 +3,7 @@ import type { UsuarioAutenticado } from "@/models/auth";
 
 interface SimulatorViewProps {
   user: UsuarioAutenticado;
-  onLogout: () => void;
+  onLogout: () => void | Promise<void>;
 }
 
 export function SimulatorView({ user, onLogout }: SimulatorViewProps) {

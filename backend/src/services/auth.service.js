@@ -8,6 +8,7 @@ const HASH_ITERATIONS = 100_000;
 const HASH_KEY_LENGTH = 32;
 const SESSION_TTL_SECONDS = 60 * 60 * 8;
 const ROL_PREDETERMINADO = "arquitecto";
+const MIN_PASSWORD_LENGTH = 10;
 
 function createHttpError(statusCode, message) {
   const error = new Error(message);
@@ -32,8 +33,11 @@ function assertEmail(email) {
 }
 
 function assertPassword(password) {
-  if (String(password ?? "").length < 6) {
-    throw createHttpError(400, "La contraseña debe tener al menos 6 caracteres.");
+  if (String(password ?? "").length < MIN_PASSWORD_LENGTH) {
+    throw createHttpError(
+      400,
+      `La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres.`,
+    );
   }
 }
 
@@ -111,13 +115,29 @@ function sign(value) {
   return createHmac("sha256", env.auth.sessionSecret).update(value).digest("base64url");
 }
 
+export function safeEqualString(leftValue, rightValue) {
+  const left = Buffer.from(String(leftValue ?? ""), "utf8");
+  const right = Buffer.from(String(rightValue ?? ""), "utf8");
+
+  return left.length === right.length && timingSafeEqual(left, right);
+}
+
+function publicSession(session) {
+  return {
+    usuario: session.usuario,
+    csrfToken: session.csrfToken,
+  };
+}
+
 function createSession(user) {
   const nowSeconds = Math.floor(Date.now() / 1000);
+  const csrfToken = randomBytes(32).toString("base64url");
   const payload = base64UrlEncode(
     JSON.stringify({
       sub: user.id,
       email: user.email,
       rol: user.rol,
+      csrfToken,
       iat: nowSeconds,
       exp: nowSeconds + SESSION_TTL_SECONDS,
     }),
@@ -125,6 +145,7 @@ function createSession(user) {
 
   return {
     usuario: user,
+    csrfToken,
     token: `ses.${payload}.${sign(payload)}`,
   };
 }
@@ -132,7 +153,7 @@ function createSession(user) {
 function parseToken(token) {
   const [prefix, payload, signature] = String(token ?? "").split(".");
 
-  if (prefix !== "ses" || !payload || !signature || sign(payload) !== signature) {
+  if (prefix !== "ses" || !payload || !signature || !safeEqualString(sign(payload), signature)) {
     throw createHttpError(401, "Sesión inválida o vencida.");
   }
 
@@ -150,7 +171,35 @@ function parseToken(token) {
   }
 }
 
+function sessionCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: env.auth.cookieSecure,
+    sameSite: "lax",
+    path: "/",
+    maxAge: SESSION_TTL_SECONDS * 1000,
+  };
+}
+
+function clearSessionCookieOptions() {
+  const { maxAge: _maxAge, ...options } = sessionCookieOptions();
+  return options;
+}
+
 export const authService = {
+  cookieName: env.auth.cookieName,
+  csrfHeaderName: "x-csrf-token",
+
+  publicSession,
+
+  setSessionCookie(response, token) {
+    response.cookie(env.auth.cookieName, token, sessionCookieOptions());
+  },
+
+  clearSessionCookie(response) {
+    response.clearCookie(env.auth.cookieName, clearSessionCookieOptions());
+  },
+
   async register(payload = {}) {
     const pool = getDatabasePool();
     const { name, email, password } = validateRegistrationPayload(payload);
@@ -216,6 +265,9 @@ export const authService = {
       throw createHttpError(401, "Sesión inválida o vencida.");
     }
 
-    return mapUser(user);
+    return {
+      usuario: mapUser(user),
+      csrfToken: String(payload.csrfToken ?? ""),
+    };
   },
 };

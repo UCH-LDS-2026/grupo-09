@@ -9,10 +9,17 @@ interface LoginViewProps {
   error: string | null;
   isSubmitting: boolean;
   onLogin: (credentials: LoginCredentials) => Promise<boolean>;
+  onModeChange?: () => void;
   onRegister: (credentials: RegisterCredentials) => Promise<boolean>;
 }
 
-export function LoginView({ error, isSubmitting, onLogin, onRegister }: LoginViewProps) {
+export function LoginView({
+  error,
+  isSubmitting,
+  onLogin,
+  onModeChange,
+  onRegister,
+}: LoginViewProps) {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -43,7 +50,7 @@ export function LoginView({ error, isSubmitting, onLogin, onRegister }: LoginVie
                 <Activity className="h-5 w-5 text-[color:var(--neon-cyan)]" />
               </div>
               <div>
-                <p className="text-sm font-semibold">Simulador de arquitectura distribuida</p>
+                <p className="text-sm font-semibold">StressFlow</p>
                 <p className="font-mono text-[11px] text-muted-foreground">
                   Laboratorio visual de carga
                 </p>
@@ -86,7 +93,7 @@ export function LoginView({ error, isSubmitting, onLogin, onRegister }: LoginVie
               <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-md bg-[color:var(--neon-cyan)]/15 ring-1 ring-[color:var(--neon-cyan)]/45">
                 <Activity className="h-5 w-5 text-[color:var(--neon-cyan)]" />
               </div>
-              <p className="text-sm font-semibold">Simulador de arquitectura distribuida</p>
+              <p className="text-sm font-semibold">StressFlow</p>
             </div>
 
             <div className="rounded-lg border border-border/70 bg-panel/80 p-6 shadow-[var(--shadow-glow-cyan)] backdrop-blur">
@@ -147,7 +154,7 @@ export function LoginView({ error, isSubmitting, onLogin, onRegister }: LoginVie
                       id="password"
                       type={showPassword ? "text" : "password"}
                       autoComplete={isRegistering ? "new-password" : "current-password"}
-                      minLength={6}
+                      minLength={10}
                       className="h-11 pl-10 pr-11"
                       value={password}
                       onChange={(event) => setPassword(event.target.value)}
@@ -185,7 +192,10 @@ export function LoginView({ error, isSubmitting, onLogin, onRegister }: LoginVie
                 <button
                   type="button"
                   className="font-medium text-[color:var(--neon-cyan)] hover:underline"
-                  onClick={() => setMode(isRegistering ? "login" : "register")}
+                  onClick={() => {
+                    onModeChange?.();
+                    setMode(isRegistering ? "login" : "register");
+                  }}
                 >
                   {isRegistering ? "Iniciar sesión" : "Crear cuenta"}
                 </button>

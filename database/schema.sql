@@ -1,8 +1,8 @@
-CREATE DATABASE IF NOT EXISTS softwareestres
+CREATE DATABASE IF NOT EXISTS stressflow
   CHARACTER SET utf8mb4
   COLLATE utf8mb4_unicode_ci;
 
-USE softwareestres;
+USE stressflow;
 
 CREATE TABLE IF NOT EXISTS usuarios (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -23,6 +23,9 @@ CREATE TABLE IF NOT EXISTS proyectos (
   slug VARCHAR(180) NOT NULL,
   descripcion TEXT NULL,
   trafico_entrante_rps INT UNSIGNED NOT NULL DEFAULT 600,
+  average_request_size_kb DECIMAL(10,2) NOT NULL DEFAULT 5.00,
+  heavy_request_percentage DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+  heavy_request_size_kb DECIMAL(10,2) NOT NULL DEFAULT 50.00,
   esta_ejecutando BOOLEAN NOT NULL DEFAULT TRUE,
   creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   actualizado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -32,6 +35,30 @@ CREATE TABLE IF NOT EXISTS proyectos (
   CONSTRAINT proyectos_usuario_id_fk
     FOREIGN KEY (usuario_id) REFERENCES usuarios (id)
     ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS versiones_escenarios (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  proyecto_id BIGINT UNSIGNED NOT NULL,
+  creado_por_usuario_id BIGINT UNSIGNED NULL,
+  nombre VARCHAR(120) NOT NULL,
+  descripcion VARCHAR(500) NULL,
+  snapshot_json JSON NOT NULL,
+  trafico_rps INT UNSIGNED NOT NULL DEFAULT 0,
+  cantidad_nodos INT UNSIGNED NOT NULL DEFAULT 0,
+  latencia_promedio_ms DECIMAL(14,4) NULL,
+  tasa_error DECIMAL(12,8) NULL,
+  costo_mensual DECIMAL(14,2) NULL,
+  creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY versiones_escenarios_proyecto_fecha_indice (proyecto_id, creado_en, id),
+  KEY versiones_escenarios_creado_por_indice (creado_por_usuario_id),
+  CONSTRAINT versiones_escenarios_proyecto_id_fk
+    FOREIGN KEY (proyecto_id) REFERENCES proyectos (id)
+    ON DELETE CASCADE,
+  CONSTRAINT versiones_escenarios_creado_por_fk
+    FOREIGN KEY (creado_por_usuario_id) REFERENCES usuarios (id)
+    ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS categorias_componentes (
@@ -81,6 +108,7 @@ CREATE TABLE IF NOT EXISTS nodos_proyectos (
   tamano_cola INT UNSIGNED NOT NULL,
   tiempo_espera_ms INT UNSIGNED NOT NULL,
   costo_por_instancia DECIMAL(10,2) NOT NULL,
+  ancho_banda_mbps DECIMAL(10,2) NOT NULL DEFAULT 100.00,
   creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   actualizado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
@@ -162,5 +190,5 @@ ON DUPLICATE KEY UPDATE
   activo = TRUE;
 
 UPDATE tipos_componentes
-SET activo = FALSE
+SET activo = TRUE
 WHERE codigo = 'cache';

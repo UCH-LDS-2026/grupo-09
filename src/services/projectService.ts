@@ -1,8 +1,6 @@
 import type { UsuarioAutenticado } from "@/models/auth";
-import type { SimEdge, SimNode } from "@/lib/simulator";
-import { authService } from "@/services/authService";
-
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001/api";
+import { KIND_META, type SimEdge, type SimNode, type SimResult } from "@/lib/simulator";
+import { requestJson } from "@/services/httpClient";
 
 export interface ProjectSummary {
   id: number;
@@ -10,6 +8,9 @@ export interface ProjectSummary {
   slug: string;
   descripcion: string | null;
   traficoEntranteRps: number;
+  averageRequestSizeKb: number;
+  heavyRequestPercentage: number;
+  heavyRequestSizeKb: number;
   estaEjecutando: boolean;
   creadoEn: string;
   actualizadoEn: string;
@@ -20,11 +21,45 @@ export interface SavedProject extends ProjectSummary {
   conexiones: SimEdge[];
 }
 
+export interface VersionSnapshot {
+  schemaVersion: number;
+  nodes: SimNode[];
+  edges: SimEdge[];
+  traffic: number;
+  averageRequestSizeKb: number;
+  heavyRequestPercentage: number;
+  heavyRequestSizeKb: number;
+  result: SimResult | null;
+  [key: string]: unknown;
+}
+
+export interface ScenarioVersionSummary {
+  id: number;
+  projectId: number;
+  name: string;
+  description: string | null;
+  summary: string;
+  createdBy: string | null;
+  createdAt: string;
+  trafficRps: number;
+  nodeCount: number;
+  avgLatencyMs: number | null;
+  errorRate: number | null;
+  monthlyCost: number | null;
+}
+
+export interface ScenarioVersion extends ScenarioVersionSummary {
+  snapshot: VersionSnapshot;
+}
+
 interface SaveProjectPayload {
   id: number | null;
   usuario: UsuarioAutenticado;
   nombre: string;
   trafico: number;
+  averageRequestSizeKb: number;
+  heavyRequestPercentage: number;
+  heavyRequestSizeKb: number;
   estaEjecutando: boolean;
   nodos: SimNode[];
   conexiones: SimEdge[];
@@ -68,6 +103,7 @@ interface NodoDto {
   tamanoCola: number;
   tiempoEsperaMs: number;
   costoPorInstancia: number;
+  anchoBandaMbps?: number;
 }
 
 interface ConexionDto {
@@ -80,26 +116,6 @@ interface ConexionDto {
 interface ProyectoDto extends ProjectSummary {
   nodos?: NodoDto[];
   conexiones?: ConexionDto[];
-}
-
-async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = authService.getToken();
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...init?.headers,
-    },
-  });
-
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    const message = body?.error?.message ?? "No se pudo completar la operación.";
-    throw new Error(message);
-  }
-
-  return response.json() as Promise<T>;
 }
 
 function mapNodoDesdeDto(nodo: NodoDto): SimNode {
@@ -115,6 +131,8 @@ function mapNodoDesdeDto(nodo: NodoDto): SimNode {
     queueSize: nodo.tamanoCola,
     timeout: nodo.tiempoEsperaMs,
     costPerInstance: nodo.costoPorInstancia,
+    bandwidthMbps:
+      nodo.anchoBandaMbps ?? KIND_META[TIPO_COMPONENTE_A_FRONT[nodo.tipo]].defaults.bandwidthMbps,
   };
 }
 
@@ -131,6 +149,7 @@ function mapNodoParaDto(nodo: SimNode): NodoDto {
     tamanoCola: nodo.queueSize,
     tiempoEsperaMs: nodo.timeout,
     costoPorInstancia: nodo.costPerInstance,
+    anchoBandaMbps: nodo.bandwidthMbps,
   };
 }
 
@@ -181,6 +200,9 @@ export const projectService = {
         usuario: payload.usuario,
         nombre: payload.nombre,
         trafico: payload.trafico,
+        averageRequestSizeKb: payload.averageRequestSizeKb,
+        heavyRequestPercentage: payload.heavyRequestPercentage,
+        heavyRequestSizeKb: payload.heavyRequestSizeKb,
         estaEjecutando: payload.estaEjecutando,
         nodos: payload.nodos.map(mapNodoParaDto),
         conexiones: payload.conexiones.map(mapConexionParaDto),
@@ -194,5 +216,33 @@ export const projectService = {
     await requestJson<{ eliminado: true }>(`/proyectos/${id}`, {
       method: "DELETE",
     });
+  },
+
+  async listVersions(projectId: number): Promise<ScenarioVersionSummary[]> {
+    const data = await requestJson<{ versions: ScenarioVersionSummary[] }>(
+      `/proyectos/${projectId}/versiones`,
+    );
+    return data.versions;
+  },
+
+  async createVersion(
+    projectId: number,
+    payload: { name: string; description?: string; snapshot: VersionSnapshot },
+  ): Promise<ScenarioVersionSummary> {
+    const data = await requestJson<{ version: ScenarioVersionSummary }>(
+      `/proyectos/${projectId}/versiones`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+    );
+    return data.version;
+  },
+
+  async getVersion(projectId: number, versionId: number): Promise<ScenarioVersion> {
+    const data = await requestJson<{ version: ScenarioVersion }>(
+      `/proyectos/${projectId}/versiones/${versionId}`,
+    );
+    return data.version;
   },
 };

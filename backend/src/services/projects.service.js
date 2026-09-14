@@ -1,5 +1,12 @@
 import { getDatabasePool } from "../config/database.js";
-import { normalizeProjectGraph } from "../../../shared/simulator-core.js";
+import {
+  DEFAULT_AVERAGE_REQUEST_SIZE_KB,
+  DEFAULT_HEAVY_REQUEST_PERCENTAGE,
+  DEFAULT_HEAVY_REQUEST_SIZE_KB,
+  MAX_TRAFFIC_RPS,
+  normalizeProjectGraph,
+  normalizeRequestProfile,
+} from "../../../shared/simulator-core.js";
 
 const ROLES_VALIDOS = new Set(["administrador", "arquitecto", "lector"]);
 const TIPO_COMPONENTE_SIMULADOR_A_ES = {
@@ -51,8 +58,16 @@ function normalizeUser(user = {}) {
 
 function normalizeProjectPayload(payload = {}, authenticatedUser) {
   const name = String(payload.nombre ?? "Proyecto sin nombre").trim() || "Proyecto sin nombre";
-  const traffic = Math.max(0, Math.round(Number(payload.trafico ?? 600)));
+  const traffic = Math.min(
+    MAX_TRAFFIC_RPS,
+    Math.max(0, Math.round(Number(payload.trafico ?? 600))),
+  );
   const running = Boolean(payload.estaEjecutando ?? true);
+  const requestProfile = normalizeRequestProfile({
+    averageRequestSizeKb: payload.averageRequestSizeKb,
+    heavyRequestPercentage: payload.heavyRequestPercentage,
+    heavyRequestSizeKb: payload.heavyRequestSizeKb,
+  });
   const rawNodes = payload.nodos;
   const rawEdges = payload.conexiones;
   const nodes = Array.isArray(rawNodes) ? rawNodes.map(mapNodePayloadToSimulator) : [];
@@ -70,6 +85,7 @@ function normalizeProjectPayload(payload = {}, authenticatedUser) {
     name: name.slice(0, 160),
     description: payload.descripcion ? String(payload.descripcion) : null,
     traffic,
+    ...requestProfile,
     running,
     nodes: graph.nodes,
     edges: graph.edges,
@@ -89,6 +105,7 @@ function mapNodePayloadToSimulator(node = {}) {
     queueSize: node.tamanoCola,
     timeout: node.tiempoEsperaMs,
     costPerInstance: node.costoPorInstancia,
+    bandwidthMbps: node.anchoBandaMbps,
   };
 }
 
@@ -168,8 +185,9 @@ async function replaceProjectNodesAndEdges(connection, projectId, nodes, edges) 
         latencia_base_ms,
         tamano_cola,
         tiempo_espera_ms,
-        costo_por_instancia
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        costo_por_instancia,
+        ancho_banda_mbps
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         projectId,
         componentTypeId,
@@ -183,6 +201,7 @@ async function replaceProjectNodesAndEdges(connection, projectId, nodes, edges) 
         Math.max(0, Math.round(toNumber(node.queueSize))),
         Math.max(0, Math.round(toNumber(node.timeout))),
         Math.max(0, toNumber(node.costPerInstance)),
+        Math.max(0, toNumber(node.bandwidthMbps)),
       ],
     );
 
@@ -217,9 +236,22 @@ async function createProject(connection, payload, userId) {
       slug,
       descripcion,
       trafico_entrante_rps,
-      esta_ejecutando
-    ) VALUES (?, ?, ?, ?, ?, ?)`,
-    [userId, payload.name, slug, payload.description, payload.traffic, payload.running],
+      esta_ejecutando,
+      average_request_size_kb,
+      heavy_request_percentage,
+      heavy_request_size_kb
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      userId,
+      payload.name,
+      slug,
+      payload.description,
+      payload.traffic,
+      payload.running,
+      payload.averageRequestSizeKb,
+      payload.heavyRequestPercentage,
+      payload.heavyRequestSizeKb,
+    ],
   );
 
   return result.insertId;
@@ -233,9 +265,21 @@ async function updateProject(connection, payload, userId) {
       SET nombre = ?,
           descripcion = ?,
           trafico_entrante_rps = ?,
-          esta_ejecutando = ?
+          esta_ejecutando = ?,
+          average_request_size_kb = ?,
+          heavy_request_percentage = ?,
+          heavy_request_size_kb = ?
       WHERE id = ?`,
-    [payload.name, payload.description, payload.traffic, payload.running, payload.id],
+    [
+      payload.name,
+      payload.description,
+      payload.traffic,
+      payload.running,
+      payload.averageRequestSizeKb,
+      payload.heavyRequestPercentage,
+      payload.heavyRequestSizeKb,
+      payload.id,
+    ],
   );
 
   return payload.id;
@@ -248,6 +292,11 @@ function mapProjectRow(row) {
     slug: row.slug,
     descripcion: row.descripcion,
     traficoEntranteRps: row.trafico_entrante_rps,
+    averageRequestSizeKb: Number(row.average_request_size_kb ?? DEFAULT_AVERAGE_REQUEST_SIZE_KB),
+    heavyRequestPercentage: Number(
+      row.heavy_request_percentage ?? DEFAULT_HEAVY_REQUEST_PERCENTAGE,
+    ),
+    heavyRequestSizeKb: Number(row.heavy_request_size_kb ?? DEFAULT_HEAVY_REQUEST_SIZE_KB),
     estaEjecutando: Boolean(row.esta_ejecutando),
     creadoEn: row.creado_en,
     actualizadoEn: row.actualizado_en,
@@ -278,6 +327,9 @@ export const projectsService = {
         slug,
         descripcion,
         trafico_entrante_rps,
+        average_request_size_kb,
+        heavy_request_percentage,
+        heavy_request_size_kb,
         esta_ejecutando,
         creado_en,
         actualizado_en
@@ -305,6 +357,9 @@ export const projectsService = {
         slug,
         descripcion,
         trafico_entrante_rps,
+        average_request_size_kb,
+        heavy_request_percentage,
+        heavy_request_size_kb,
         esta_ejecutando,
         creado_en,
         actualizado_en
@@ -331,7 +386,8 @@ export const projectsService = {
         pn.latencia_base_ms,
         pn.tamano_cola,
         pn.tiempo_espera_ms,
-        pn.costo_por_instancia
+        pn.costo_por_instancia,
+        pn.ancho_banda_mbps
       FROM nodos_proyectos pn
       INNER JOIN tipos_componentes ct ON ct.id = pn.tipo_componente_id
       WHERE pn.proyecto_id = ?
@@ -367,6 +423,7 @@ export const projectsService = {
         tamanoCola: row.tamano_cola,
         tiempoEsperaMs: row.tiempo_espera_ms,
         costoPorInstancia: Number(row.costo_por_instancia),
+        anchoBandaMbps: Number(row.ancho_banda_mbps),
       })),
       conexiones: edgeRows.map((row) => ({
         id: row.conexion_cliente_id,

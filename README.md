@@ -1,6 +1,6 @@
 # Software Estrés - Grupo 9
 
-Aplicación web para diseñar, guardar y simular arquitecturas distribuidas bajo carga. El usuario arma un flujo con componentes como puerta de enlace API, balanceadores, servicios, bases de datos y colas; el sistema calcula salida procesada, latencia, error, costo mensual y cuellos de botella.
+Aplicación web para diseñar, guardar y simular arquitecturas distribuidas bajo carga. El usuario arma un flujo con componentes como puerta de enlace API, balanceadores, servicios, bases de datos, cache y colas; el sistema calcula salida procesada, latencia progresiva, error, costo mensual, tráfico de red, saturación por RPS/bandwidth y cuellos de botella con una recomendación accionable.
 
 ## Integrantes
 
@@ -36,83 +36,206 @@ El frontend se organiza así:
 - `src/models/`: tipos TypeScript.
 - `src/lib/`: utilidades y puente al motor compartido.
 
-## Instalación
+## Instalación rápida
+
+Estos son los pasos para dejar el proyecto corriendo desde cero en una Mac. La rama operativa principal es `main`; la rama `juan` se usa para trabajo diario y se mantiene sincronizada con `main`.
+
+### Comandos rápidos
 
 ```bash
+brew install git node mysql
+brew services start mysql
+
+git clone https://github.com/LozanoSh/StressFlow.git
+cd stressflow
+git checkout main
+git pull origin main
+
 npm install
 cd backend
 npm install
 cd ..
-```
 
-## Base de datos
-
-Crear estructura y catálogo inicial:
-
-```bash
+cp backend/.env.example backend/.env
 mysql -u root -p < database/schema.sql
 ```
 
-Cargar datos demo opcionales:
-
-```bash
-mysql -u root -p softwareestres < database/seed-demo.sql
-```
-
-Tablas actuales:
-
-- `usuarios`: cuentas, email, contraseña hasheada y rol.
-- `proyectos`: proyectos guardados por usuario.
-- `categorias_componentes`: agrupaciones del catálogo.
-- `tipos_componentes`: tipos de nodos disponibles y valores predeterminados.
-- `nodos_proyectos`: nodos colocados en el canvas.
-- `conexiones_proyectos`: conexiones entre nodos.
-
-## Variables de entorno
-
-Copiar ejemplo:
-
-```bash
-cp backend/.env.example backend/.env
-```
-
-Valores esperados:
-
-```txt
-NODE_ENV=development
-API_PORT=3001
-CORS_ORIGIN=http://localhost:8080
-SESSION_SECRET=reemplazar_por_un_valor_largo_y_privado
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_NAME=softwareestres
-DB_USER=root
-DB_PASSWORD=
-```
-
-No subir `backend/.env` al repositorio.
-
-## Levantar
-
-Backend:
+Para levantar el backend:
 
 ```bash
 cd backend
 npm run dev
 ```
 
-Frontend:
+Para levantar el frontend, en otra terminal desde la carpeta `stressflow`:
+
+```bash
+cp .env.example .env.local
+# VITE_API_URL=http://localhost:3001/api
+```
 
 ```bash
 npm run dev
 ```
 
-URLs locales:
+Abrir:
 
 ```txt
-Frontend: http://localhost:8080/
-Backend:  http://localhost:3001/
+http://localhost:8080
 ```
+
+### Paso a paso
+
+1. Instalar Homebrew si no está instalado:
+
+   ```bash
+   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+   ```
+
+2. Instalar Git, Node 22.12+ y MySQL:
+
+   ```bash
+   brew install git node mysql
+   ```
+
+3. Levantar MySQL:
+
+   ```bash
+   brew services start mysql
+   ```
+
+4. Clonar el repositorio:
+
+   ```bash
+   git clone https://github.com/LozanoSh/StressFlow.git
+   ```
+
+5. Entrar al proyecto:
+
+   ```bash
+   cd stressflow
+   ```
+
+6. Cambiar a la rama correcta:
+
+   ```bash
+   git checkout main
+   git pull origin main
+   ```
+
+7. Instalar dependencias del frontend:
+
+   ```bash
+   npm install
+   ```
+
+8. Instalar dependencias del backend:
+
+   ```bash
+   cd backend
+   npm install
+   cd ..
+   ```
+
+9. Crear archivo `.env` del backend:
+
+   ```bash
+   cp backend/.env.example backend/.env
+   ```
+
+   Si MySQL tiene contraseña, completar `DB_PASSWORD` dentro de `backend/.env`.
+
+   Valores esperados para desarrollo local del backend:
+
+   ```txt
+   NODE_ENV=development
+   API_PORT=3001
+   CORS_ORIGIN=http://localhost:8080
+   SESSION_SECRET=clave_larga_para_desarrollo
+   SESSION_COOKIE_NAME=stressflow_session
+   SESSION_COOKIE_SECURE=false
+   DB_HOST=127.0.0.1
+   DB_PORT=3306
+   DB_NAME=stressflow
+   DB_USER=root
+   DB_PASSWORD=
+   ```
+
+10. Crear la base de datos:
+
+    ```bash
+    mysql -u root -p < database/schema.sql
+    ```
+
+    Si MySQL no tiene contraseña:
+
+    ```bash
+    mysql -u root < database/schema.sql
+    ```
+
+11. Opcional: cargar datos de prueba:
+
+    ```bash
+    mysql -u root -p stressflow < database/seed-demo.sql
+    ```
+
+    Si ya existe una base creada antes de habilitar cache, aplicar la migracion:
+
+    ```bash
+    mysql -u root -p stressflow < database/migrations/005-enable-cache-component.sql
+    ```
+
+12. Levantar backend en una terminal:
+
+    ```bash
+    cd backend
+    npm run dev
+    ```
+
+13. Levantar frontend en otra terminal, desde la carpeta `stressflow`:
+
+    ```bash
+    cp .env.example .env.local
+    npm run dev
+    ```
+
+14. Abrir el sistema:
+
+    ```txt
+    http://localhost:8080
+    ```
+
+15. Verificar backend y base de datos:
+
+    ```txt
+    http://localhost:3001/health
+    http://localhost:3001/api/health/db
+    ```
+
+16. Ejecutar tests desde la carpeta `stressflow`:
+
+    ```bash
+    npm test
+    ```
+
+## Base de datos
+
+Tablas actuales:
+
+- `usuarios`: guarda las cuentas del sistema. Incluye nombre, email, contraseña hasheada y rol (`administrador`, `arquitecto` o `lector`).
+- `proyectos`: guarda cada arquitectura creada por un usuario. Incluye nombre, descripcion, slug, trafico entrante y estado de ejecucion.
+- `categorias_componentes`: agrupa visualmente los tipos de componentes del simulador, por ejemplo trafico, computo, mensajeria y almacenamiento.
+- `tipos_componentes`: define el catalogo de nodos disponibles, como puerta de enlace API, balanceador, servicio, cache, base de datos y cola. Tambien guarda valores por defecto de capacidad, latencia, cola y costo.
+- `nodos_proyectos`: guarda los componentes colocados dentro de cada proyecto, con posicion, instancias, capacidad, latencia, cola, timeout y costo.
+- `conexiones_proyectos`: guarda las conexiones entre nodos de un proyecto. Permite reconstruir el grafo de la arquitectura y ejecutar la simulacion.
+
+Relaciones principales:
+
+- Un `usuario` tiene muchos `proyectos`.
+- Un `proyecto` tiene muchos `nodos_proyectos`.
+- Un `proyecto` tiene muchas `conexiones_proyectos`.
+- Cada nodo pertenece a un `tipo_componente`.
+- Las conexiones apuntan a un nodo origen y a un nodo destino.
 
 ## Endpoints
 
@@ -150,7 +273,7 @@ POST http://localhost:3001/api/simulaciones/ejecutar
 Los endpoints privados requieren:
 
 ```txt
-Authorization: Bearer <token>
+Cookie HttpOnly `stressflow_session` + header `X-CSRF-Token` en requests POST/PUT/DELETE autenticados
 ```
 
 ## Tests y validaciones
@@ -161,30 +284,49 @@ Ejecutar todo:
 npm test
 npm run lint
 npm run build
+npm run security:audit
 ```
 
 Tests actuales:
 
-- `tests/unitarios.test.ts`: funciones aisladas, reglas de negocio y validación de auth.
-- `tests/integracion.test.ts`: simulación completa de una arquitectura puerta de enlace -> aplicación -> base de datos.
+- `tests/unitarios.test.ts`: prueba funciones aisladas del simulador, autenticacion y middlewares de seguridad. Verifica capacidad total de nodos, estados por carga, latencia progresiva, metricas de trafico/red, recomendaciones, reglas de conexion, defaults de proyectos guardados, explicacion del sistema, validacion de email/contrasena, limites de dominio, CSRF, cookies de sesion y rate limit de login.
+- `tests/integracion.test.ts`: prueba el motor completo de simulacion con arquitecturas puerta de enlace API -> servicio de aplicacion -> base de datos y con cache de punta a punta. Verifica ciclos, throughput, errores, costo, nodos sin perdida, reduccion de trafico por cache, deteccion de cuello de botella, latencia progresiva y equivalencia entre payload frontend/backend.
+
+Estos tests son importantes porque validan la logica central del proyecto sin depender de la interfaz visual. Si pasan, sabemos que las reglas principales del simulador siguen funcionando aunque se modifique el frontend o el backend.
 
 Total actual:
 
 ```txt
 2 archivos
-10 tests
+33 tests
 ```
 
 ## Seguridad Aplicada
 
-- Contraseñas con PBKDF2 + salt.
-- Tokens firmados con HMAC.
-- Tokens con expiración.
-- Endpoints privados protegidos por middleware de autenticación.
-- Rate limit básico en `/api`.
-- Headers de seguridad básicos.
+- Contraseñas con PBKDF2 + salt y minimo de 10 caracteres.
+- Sesion firmada con HMAC en cookie `HttpOnly`, `SameSite=Lax` y `Secure` configurable para produccion.
+- Token CSRF obligatorio en requests con cambios cuando la autenticacion entra por cookie.
+- Endpoints privados protegidos por middleware de autenticacion y autorizacion por rol.
+- Rate limit general en `/api` y rate limit especifico para login por IP + email.
+- Headers de seguridad: CSP, `nosniff`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` y CORP.
+- Configuracion de produccion falla al iniciar si falta `SESSION_SECRET`, `CORS_ORIGIN`, password de DB o si `DB_USER=root`.
 - Errores 500 sin stack trace en respuesta HTTP.
-- Variables sensibles fuera del repositorio.
+- Variables sensibles fuera del repositorio; `.env.example` solo contiene placeholders.
+- Auditoria de dependencias con `npm run security:audit`.
+- CI en GitHub Actions con `npm ci`, lint, tests, build y auditoria de dependencias de produccion.
+- Limites de dominio para simulacion/proyectos: maximo de nodos, conexiones, trafico y valores numericos.
+
+## Checklist de produccion
+
+Antes de desplegar:
+
+1. Definir `NODE_ENV=production`.
+2. Usar un `SESSION_SECRET` privado de al menos 32 caracteres.
+3. Configurar `CORS_ORIGIN` con origenes exactos, sin `*`.
+4. Usar usuario MySQL dedicado, no `root`, con password obligatorio.
+5. Definir `SESSION_COOKIE_SECURE=true` si la API corre detras de HTTPS.
+6. Ejecutar `npm run security:audit`, `npm test`, `npm run lint` y `npm run build`.
+7. Aplicar migraciones SQL pendientes antes de levantar la API.
 
 ## Notas
 

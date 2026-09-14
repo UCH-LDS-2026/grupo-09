@@ -22,6 +22,7 @@ function mapNodePayloadToSimulator(node = {}) {
     queueSize: node.tamanoCola,
     timeout: node.tiempoEsperaMs,
     costPerInstance: node.costoPorInstancia,
+    bandwidthMbps: node.anchoBandaMbps,
   };
 }
 
@@ -34,19 +35,30 @@ function mapEdgePayloadToSimulator(edge = {}) {
   };
 }
 
-function mapSimulationPayload(rawPayload = {}) {
+export function mapSimulationPayload(rawPayload = {}) {
   return {
     nodes: Array.isArray(rawPayload.nodos) ? rawPayload.nodos.map(mapNodePayloadToSimulator) : [],
     edges: Array.isArray(rawPayload.conexiones)
       ? rawPayload.conexiones.map(mapEdgePayloadToSimulator)
       : [],
     traffic: rawPayload.trafico,
+    averageRequestSizeKb: rawPayload.averageRequestSizeKb,
+    heavyRequestPercentage: rawPayload.heavyRequestPercentage,
+    heavyRequestSizeKb: rawPayload.heavyRequestSizeKb,
   };
+}
+
+export function normalizeBackendSimulationPayload(rawPayload = {}) {
+  return normalizeSimulationPayload(mapSimulationPayload(rawPayload));
 }
 
 export const simulationsService = {
   run(rawPayload) {
-    const payload = normalizeSimulationPayload(mapSimulationPayload(rawPayload));
-    return simulate(payload.nodes, payload.edges, payload.traffic);
+    const payload = normalizeBackendSimulationPayload(rawPayload);
+    return simulate(payload.nodes, payload.edges, payload.traffic, {
+      averageRequestSizeKb: payload.averageRequestSizeKb,
+      heavyRequestPercentage: payload.heavyRequestPercentage,
+      heavyRequestSizeKb: payload.heavyRequestSizeKb,
+    });
   },
 };

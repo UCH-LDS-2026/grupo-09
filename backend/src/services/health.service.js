@@ -2,7 +2,7 @@ export const healthService = {
   getStatus() {
     return {
       status: "ok",
-      service: "softwareestres-api",
+      service: "stressflow-api",
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
     };

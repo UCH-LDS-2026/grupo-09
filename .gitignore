@@ -50,3 +50,9 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+# Agent tooling
+# Keep Spec Kit skills versioned, but avoid committing future local agent state/secrets.
+.agents/*
+!.agents/skills/
+!.agents/skills/**

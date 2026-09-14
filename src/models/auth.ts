@@ -18,7 +18,7 @@ export interface RegisterCredentials extends LoginCredentials {
 
 export interface AuthSession {
   usuario: UsuarioAutenticado;
-  token: string;
+  csrfToken: string;
 }
 
 export interface LoginResult {

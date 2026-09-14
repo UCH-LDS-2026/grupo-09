@@ -29,7 +29,7 @@ export function ConnectionsPanel({
   const connectingNodeName = connectingFromId ? nodeNames.get(connectingFromId) : null;
 
   return (
-    <div className="mt-auto space-y-3 border-t border-border/60 pt-3">
+    <div className="mt-auto space-y-2.5 border-t border-border/40 pt-3">
       <div>
         <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
           Conexiones
@@ -51,9 +51,9 @@ export function ConnectionsPanel({
           disabled={!selected}
           onClick={onStartConnection}
           className={cn(
-            "flex-1 border-[color:var(--neon-cyan)]/45 bg-[color:var(--neon-cyan)]/5 text-[color:var(--neon-cyan)] hover:bg-[color:var(--neon-cyan)]/10 hover:text-[color:var(--neon-cyan)]",
+            "flex-1 border-border/60 bg-transparent text-muted-foreground hover:bg-card hover:text-foreground",
             connectingFromId &&
-              "border-[color:var(--neon-amber)]/65 bg-[color:var(--neon-amber)]/10 text-[color:var(--neon-amber)] hover:text-[color:var(--neon-amber)]",
+              "border-[color:var(--neon-cyan)]/45 bg-[color:var(--neon-cyan)]/8 text-[color:var(--neon-cyan)] hover:text-[color:var(--neon-cyan)]",
           )}
         >
           <Link2 className="h-4 w-4" />
@@ -69,7 +69,7 @@ export function ConnectionsPanel({
       <button
         type="button"
         onClick={() => setShowConnections((value) => !value)}
-        className="flex w-full items-center justify-between rounded-md bg-card/50 px-2.5 py-2 text-xs text-muted-foreground transition hover:bg-card/80 hover:text-foreground"
+        className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-xs text-muted-foreground transition hover:bg-card hover:text-foreground"
       >
         <span>Conexiones: {edges.length}</span>
         <span className="flex items-center gap-1">
@@ -86,7 +86,7 @@ export function ConnectionsPanel({
             edges.map((edge) => (
               <div
                 key={edge.id}
-                className="flex items-center justify-between gap-2 rounded-md bg-card/60 px-2.5 py-2 text-xs"
+                className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:bg-card"
               >
                 <span className="min-w-0 flex-1 truncate">
                   {nodeNames.get(edge.from) ?? edge.from} → {nodeNames.get(edge.to) ?? edge.to}
@@ -102,7 +102,7 @@ export function ConnectionsPanel({
               </div>
             ))
           ) : (
-            <div className="rounded-md bg-card/50 p-2 text-xs text-muted-foreground">
+            <div className="px-2 py-1.5 text-xs text-muted-foreground">
               Todavía no hay conexiones.
             </div>
           )}

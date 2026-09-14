@@ -1,14 +1,59 @@
 import { describe, expect, it } from "vitest";
-import { validateRegistrationPayload } from "../backend/src/services/auth.service";
+import { csrfMiddleware } from "../backend/src/middlewares/csrf.middleware";
+import { loginRateLimitMiddleware } from "../backend/src/middlewares/rate-limit.middleware";
+import { buildSystemConclusion } from "../src/components/simulator/systemConclusionLogic";
+import { normalizeVersionSnapshot } from "../backend/src/services/project-snapshots.service";
+import {
+  authService,
+  safeEqualString,
+  validateRegistrationPayload,
+} from "../backend/src/services/auth.service";
 import {
   calculateLatency,
+  calculateBandwidthCapacityRps,
+  calculateCacheMissTraffic,
+  calculateEffectiveRequestSizeKb,
+  calculateTrafficMBps,
+  MAX_NODES,
+  MAX_TRAFFIC_RPS,
   calculateNodeCapacity,
   calculateNodeTrafficMetrics,
+  normalizeSimulationPayload,
   recommendInstancesForTraffic,
   statusFor,
   validateConnection,
   type SimNode,
 } from "../src/lib/simulator";
+
+function makeMockResponse() {
+  const headers: Record<string, string> = {};
+  return {
+    statusCode: 200,
+    body: undefined as unknown,
+    headers,
+    cookies: {} as Record<string, unknown>,
+    clearedCookies: {} as Record<string, unknown>,
+    setHeader(name: string, value: string) {
+      headers[name] = value;
+    },
+    cookie(name: string, value: string, options: unknown) {
+      this.cookies[name] = { value, options };
+      return this;
+    },
+    clearCookie(name: string, options: unknown) {
+      this.clearedCookies[name] = options;
+      return this;
+    },
+    status(code: number) {
+      this.statusCode = code;
+      return this;
+    },
+    json(payload: unknown) {
+      this.body = payload;
+      return this;
+    },
+  };
+}
 
 function makeTestNode(id: string, kind: SimNode["kind"]): SimNode {
   return {
@@ -23,6 +68,7 @@ function makeTestNode(id: string, kind: SimNode["kind"]): SimNode {
     queueSize: 0,
     timeout: 0,
     costPerInstance: 0,
+    bandwidthMbps: 1000,
   };
 }
 
@@ -75,21 +121,27 @@ describe("Tests unitarios del simulador", () => {
 
   // -------------------------------------------------------------------------
   // TEST UNITARIO 3: calculateLatency
-  // La latencia crece a medida que el nodo se carga:
-  //   load < 0.7   -> latencia base
-  //   load < 0.9   -> base * 1.5 (redondeado)
-  //   load <= 1.0  -> base * 2
-  //   load > 1.0   -> base * 3
+  // La latencia usa una curva progresiva:
+  //   load <= 0.7  -> latencia base
+  //   0.7..1.0     -> crecimiento continuo hasta 3x
+  //   load > 1.0   -> se mantiene en 3x para evitar infinitos
   // -------------------------------------------------------------------------
-  it("aumenta la latencia a medida que sube la carga", () => {
-    // Preparacion
+  it("aumenta la latencia con una curva progresiva y acotada", () => {
     const baseLatency = 20;
 
-    // Ejecucion + verificacion
-    expect(calculateLatency(baseLatency, 0.5)).toBe(20); // sin penalizacion
-    expect(calculateLatency(baseLatency, 0.8)).toBe(30); // 20 * 1.5
-    expect(calculateLatency(baseLatency, 1.0)).toBe(40); // 20 * 2
-    expect(calculateLatency(baseLatency, 1.5)).toBe(60); // 20 * 3
+    expect(calculateLatency(baseLatency, 0.5)).toBe(20);
+    expect(calculateLatency(baseLatency, 0.7)).toBe(20);
+    expect(calculateLatency(baseLatency, 0.8)).toBeGreaterThan(20);
+    expect(calculateLatency(baseLatency, 0.8)).toBeLessThan(calculateLatency(baseLatency, 0.9));
+    expect(calculateLatency(baseLatency, 0.9)).toBeLessThan(calculateLatency(baseLatency, 0.99));
+    expect(calculateLatency(baseLatency, 1.0)).toBe(60);
+    expect(calculateLatency(baseLatency, 1.5)).toBe(60);
+  });
+
+  it("normaliza entradas invalidas de latencia sin producir valores negativos", () => {
+    expect(calculateLatency(-20, 0.9)).toBe(0);
+    expect(calculateLatency(20, Number.POSITIVE_INFINITY)).toBe(60);
+    expect(calculateLatency(20, Number.NaN)).toBe(20);
   });
 });
 
@@ -105,6 +157,73 @@ describe("Tests unitarios de autenticacion", () => {
     // Ejecucion + verificacion
     expect(() => validateRegistrationPayload(payload)).toThrow("Ingresá un email válido.");
   });
+
+  it("rechaza registrar una cuenta si la contrasena es demasiado corta", () => {
+    const payload = {
+      nombre: "Usuario Demo",
+      email: "usuario@sistema.test",
+      contrasena: "demo1234",
+    };
+
+    expect(() => validateRegistrationPayload(payload)).toThrow(
+      "La contraseña debe tener al menos 10 caracteres.",
+    );
+  });
+});
+
+describe("Tests unitarios de snapshots de escenario", () => {
+  it("aplica defaults compatibles a snapshots anteriores", () => {
+    const snapshot = normalizeVersionSnapshot({
+      nodes: [
+        {
+          id: "gateway",
+          kind: "api_gateway",
+          name: "Gateway",
+          x: 10,
+          y: 20,
+          instances: 1,
+          capacity: 800,
+          baseLatency: 8,
+          queueSize: 100,
+          timeout: 2000,
+          costPerInstance: 25,
+        },
+      ],
+      edges: [],
+      traffic: 200,
+    });
+
+    expect(snapshot.schemaVersion).toBe(1);
+    expect(snapshot.averageRequestSizeKb).toBe(5);
+    expect(snapshot.heavyRequestPercentage).toBe(0);
+    expect(snapshot.heavyRequestSizeKb).toBe(50);
+    expect(snapshot.nodes[0].bandwidthMbps).toBe(1000);
+    expect(snapshot.result).toBeNull();
+  });
+
+  it("rechaza snapshots sin componentes", () => {
+    expect(() => normalizeVersionSnapshot({ nodes: [], edges: [], traffic: 100 })).toThrow(
+      "El snapshot debe tener al menos un nodo.",
+    );
+  });
+
+  it("crea una copia profunda inmutable sin compartir referencias", () => {
+    const input = {
+      nodes: [makeTestNode("gateway", "api_gateway")],
+      edges: [],
+      traffic: 100,
+      result: { totals: { throughput: 100 } },
+    };
+
+    const snapshot = normalizeVersionSnapshot(input);
+    input.nodes[0].name = "Mutado";
+    input.result.totals.throughput = 0;
+
+    expect(snapshot.nodes[0].name).toBe("gateway");
+    expect(snapshot.result?.totals.throughput).toBe(100);
+    expect(Object.isFrozen(snapshot)).toBe(true);
+    expect(Object.isFrozen(snapshot.nodes[0])).toBe(true);
+  });
 });
 
 describe("Tests unitarios de reglas de negocio del simulador", () => {
@@ -119,6 +238,80 @@ describe("Tests unitarios de reglas de negocio del simulador", () => {
     expect(metrics.load).toBe(0.75);
     expect(metrics.throughput).toBe(600);
     expect(metrics.errorRate).toBe(0);
+  });
+
+  it("calcula MBps correctamente con tamaño uniforme", () => {
+    const effectiveSizeKb = calculateEffectiveRequestSizeKb({
+      averageRequestSizeKb: 8,
+      heavyRequestPercentage: 0,
+      heavyRequestSizeKb: 100,
+    });
+
+    expect(effectiveSizeKb).toBe(8);
+    expect(calculateTrafficMBps(256, effectiveSizeKb)).toBe(2);
+  });
+
+  it("calcula MBps correctamente con mezcla heavy/liviano", () => {
+    const effectiveSizeKb = calculateEffectiveRequestSizeKb({
+      averageRequestSizeKb: 5,
+      heavyRequestPercentage: 20,
+      heavyRequestSizeKb: 50,
+    });
+
+    expect(effectiveSizeKb).toBe(14);
+    expect(calculateTrafficMBps(1024, effectiveSizeKb)).toBe(14);
+  });
+
+  it("satura por RPS cuando bandwidth está OK", () => {
+    const metrics = calculateNodeTrafficMetrics({
+      trafficRps: 1000,
+      instances: 1,
+      capacityPerInstance: 800,
+      bandwidthMbps: 1000,
+      averageRequestSizeKb: 5,
+    });
+
+    expect(metrics.saturationReason).toBe("rps");
+    expect(metrics.dropped).toBe(200);
+  });
+
+  it("satura por bandwidth cuando RPS está OK", () => {
+    const metrics = calculateNodeTrafficMetrics({
+      trafficRps: 100,
+      instances: 1,
+      capacityPerInstance: 1000,
+      bandwidthMbps: 10,
+      averageRequestSizeKb: 200,
+    });
+
+    expect(metrics.saturationReason).toBe("bandwidth");
+    expect(metrics.throughput).toBeCloseTo(calculateBandwidthCapacityRps(10, 200));
+  });
+
+  it("no satura cuando ambos están dentro de capacidad", () => {
+    const metrics = calculateNodeTrafficMetrics({
+      trafficRps: 100,
+      instances: 1,
+      capacityPerInstance: 1000,
+      bandwidthMbps: 100,
+      averageRequestSizeKb: 5,
+    });
+
+    expect(metrics.saturationReason).toBe("none");
+    expect(metrics.dropped).toBe(0);
+  });
+
+  it("proyecto guardado sin averageRequestSizeKb usa default y no rompe", () => {
+    const payload = normalizeSimulationPayload({
+      traffic: 100,
+      nodes: [makeTestNode("gateway", "api_gateway")],
+      edges: [],
+    });
+
+    expect(payload.averageRequestSizeKb).toBe(5);
+    expect(payload.heavyRequestPercentage).toBe(0);
+    expect(payload.heavyRequestSizeKb).toBe(50);
+    expect(payload.nodes[0].bandwidthMbps).toBe(1000);
   });
 
   it("calcula perdida de trafico, error y estado cuando el nodo se satura", () => {
@@ -141,6 +334,32 @@ describe("Tests unitarios de reglas de negocio del simulador", () => {
     expect(recommendedInstances).toBe(3);
   });
 
+  it("calcula el trafico que sigue hacia la base despues de pasar por cache", () => {
+    expect(calculateCacheMissTraffic(1000, 0.7)).toBeCloseTo(300);
+    expect(calculateCacheMissTraffic(1000, 1)).toBe(0);
+    expect(calculateCacheMissTraffic(1000, 0)).toBe(1000);
+  });
+
+  it("limita el trafico de simulacion al maximo permitido", () => {
+    const payload = normalizeSimulationPayload({
+      traffic: MAX_TRAFFIC_RPS + 1,
+      nodes: [makeTestNode("gateway", "api_gateway")],
+      edges: [],
+    });
+
+    expect(payload.traffic).toBe(MAX_TRAFFIC_RPS);
+  });
+
+  it("rechaza grafos que superan la cantidad maxima de nodos", () => {
+    const nodes = Array.from({ length: MAX_NODES + 1 }, (_, index) =>
+      makeTestNode(`node-${index}`, "app_service"),
+    );
+
+    expect(() => normalizeSimulationPayload({ traffic: 100, nodes, edges: [] })).toThrow(
+      `El proyecto no puede tener más de ${MAX_NODES} nodos.`,
+    );
+  });
+
   it("permite conectar puerta de enlace API hacia balanceador de carga", () => {
     const source = makeTestNode("gateway", "api_gateway");
     const target = makeTestNode("balancer", "load_balancer");
@@ -150,6 +369,20 @@ describe("Tests unitarios de reglas de negocio del simulador", () => {
     expect(result.valid).toBe(true);
   });
 
+  it("permite conectar servicio de aplicacion hacia cache y cache hacia base de datos", () => {
+    const app = makeTestNode("app", "app_service");
+    const cache = makeTestNode("cache", "cache");
+    const database = makeTestNode("database", "database");
+
+    const appToCache = validateConnection(app, cache, []);
+    const cacheToDatabase = validateConnection(cache, database, [
+      { id: "e1", from: "app", to: "cache" },
+    ]);
+
+    expect(appToCache.valid).toBe(true);
+    expect(cacheToDatabase.valid).toBe(true);
+  });
+
   it("rechaza conectar base de datos hacia puerta de enlace API", () => {
     const source = makeTestNode("database", "database");
     const target = makeTestNode("gateway", "api_gateway");
@@ -157,5 +390,184 @@ describe("Tests unitarios de reglas de negocio del simulador", () => {
     const result = validateConnection(source, target, []);
 
     expect(result.valid).toBe(false);
+  });
+});
+
+describe("Tests unitarios de explicación del sistema", () => {
+  it("explica saturación por bandwidth con recomendación de red", () => {
+    const node = makeTestNode("app", "app_service");
+    node.name = "App";
+    node.capacity = 1000;
+    node.bandwidthMbps = 10;
+    const result = {
+      perNode: {
+        app: {
+          incoming: 100,
+          capacity: 1000,
+          load: 1.2,
+          throughput: 80,
+          queued: 0,
+          dropped: 20,
+          latency: 0,
+          errorRate: 0.2,
+          status: "error" as const,
+          cost: 0,
+          bandwidthMbps: 10,
+          bandwidthLoad: 1.2,
+          incomingMBps: 1.5,
+          throughputMbps: 12,
+          effectiveRequestSizeKb: 20,
+          saturationReason: "bandwidth" as const,
+        },
+      },
+      totals: {
+        avgLatency: 0,
+        errorRate: 0.2,
+        throughput: 80,
+        incomingMBps: 1.5,
+        throughputMbps: 12,
+        effectiveRequestSizeKb: 20,
+        cost: 0,
+        cycles: 6,
+        bottleneck: { id: "app", name: "App", reason: "recibe demasiado tráfico de red" },
+      },
+      cycles: [],
+    };
+
+    const conclusion = buildSystemConclusion([node], result, 100);
+
+    expect(conclusion.primaryCause).toBe("ancho de banda");
+    expect(conclusion.bottleneckName).toBe("App");
+    expect(conclusion.recommendation).toContain("ancho de banda");
+    expect(conclusion.signals.find((signal) => signal.label === "Red")?.status).toBe("critical");
+  });
+
+  it("explica carga alta sin errores como advertencia accionable", () => {
+    const node = makeTestNode("app", "app_service");
+    node.name = "App";
+    node.capacity = 100;
+    const result = {
+      perNode: {
+        app: {
+          incoming: 80,
+          capacity: 100,
+          load: 0.8,
+          throughput: 80,
+          queued: 0,
+          dropped: 0,
+          latency: 35,
+          errorRate: 0,
+          status: "warning" as const,
+          cost: 0,
+          bandwidthMbps: 1000,
+          bandwidthLoad: 0.1,
+          incomingMBps: 0.4,
+          throughputMbps: 3.2,
+          effectiveRequestSizeKb: 5,
+          saturationReason: "none" as const,
+        },
+      },
+      totals: {
+        avgLatency: 35,
+        errorRate: 0,
+        throughput: 80,
+        incomingMBps: 0.4,
+        throughputMbps: 3.2,
+        effectiveRequestSizeKb: 5,
+        cost: 0,
+        cycles: 6,
+        bottleneck: { id: "app", name: "App", reason: "es el nodo activo con mayor carga (80%)" },
+      },
+      cycles: [],
+    };
+
+    const conclusion = buildSystemConclusion([node], result, 80);
+
+    expect(conclusion.accent).toBe("amber");
+    expect(conclusion.primaryCause).toBe("carga cercana al límite");
+    expect(conclusion.signals.find((signal) => signal.label === "Carga")?.status).toBe("warning");
+  });
+});
+
+describe("Tests unitarios de sesion segura", () => {
+  it("compara firmas de sesion en tiempo constante cuando tienen igual longitud", () => {
+    expect(safeEqualString("firma-valida", "firma-valida")).toBe(true);
+    expect(safeEqualString("firma-valida", "firma-falsa-")).toBe(false);
+    expect(safeEqualString("firma-valida", "corta")).toBe(false);
+  });
+
+  it("configura cookies de sesion HttpOnly y las limpia con opciones compatibles", () => {
+    const response = makeMockResponse();
+
+    authService.setSessionCookie(response, "ses.payload.firma");
+    authService.clearSessionCookie(response);
+
+    expect(response.cookies[authService.cookieName]).toMatchObject({
+      value: "ses.payload.firma",
+      options: { httpOnly: true, sameSite: "lax", path: "/" },
+    });
+    expect(response.clearedCookies[authService.cookieName]).toMatchObject({
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+    });
+    expect(response.clearedCookies[authService.cookieName]).not.toHaveProperty("maxAge");
+  });
+});
+describe("Tests unitarios de middlewares de seguridad", () => {
+  it("bloquea requests con cookie sin token CSRF en metodos con cambios", () => {
+    const request = {
+      method: "POST",
+      auth: { viaCookie: true, csrfToken: "csrf-valido" },
+      get: () => undefined,
+    };
+    const response = makeMockResponse();
+    const nextCalls: unknown[] = [];
+
+    csrfMiddleware(request, response, (error?: unknown) => nextCalls.push(error));
+
+    expect(nextCalls).toHaveLength(1);
+    expect(nextCalls[0]).toMatchObject({ statusCode: 403 });
+  });
+
+  it("permite requests con cookie cuando el token CSRF coincide", () => {
+    const request = {
+      method: "POST",
+      auth: { viaCookie: true, csrfToken: "csrf-valido" },
+      get: (name: string) => (name === "x-csrf-token" ? "csrf-valido" : undefined),
+    };
+    const response = makeMockResponse();
+    const nextCalls: unknown[] = [];
+
+    csrfMiddleware(request, response, (error?: unknown) => nextCalls.push(error));
+
+    expect(nextCalls).toEqual([undefined]);
+  });
+
+  it("limita intentos de login por combinacion de ip y email", () => {
+    const middleware = loginRateLimitMiddleware(60_000, 2);
+    const request = {
+      ip: "203.0.113.10",
+      socket: {},
+      body: { email: "usuario@sistema.test" },
+    };
+    const firstResponse = makeMockResponse();
+    const secondResponse = makeMockResponse();
+    const thirdResponse = makeMockResponse();
+    let nextCount = 0;
+
+    middleware(request, firstResponse, () => {
+      nextCount += 1;
+    });
+    middleware(request, secondResponse, () => {
+      nextCount += 1;
+    });
+    middleware(request, thirdResponse, () => {
+      nextCount += 1;
+    });
+
+    expect(nextCount).toBe(2);
+    expect(thirdResponse.statusCode).toBe(429);
+    expect(thirdResponse.headers["Retry-After"]).toBeDefined();
   });
 });

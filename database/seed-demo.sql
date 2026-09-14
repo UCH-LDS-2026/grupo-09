@@ -1,4 +1,4 @@
-USE softwareestres;
+USE stressflow;
 
 -- Datos de demostracion para la defensa.
 -- Crea un usuario demo y tres proyectos listos para mostrar:
@@ -10,8 +10,8 @@ USE softwareestres;
 INSERT INTO usuarios (nombre, email, hash_contrasena, rol)
 VALUES (
   'Usuario Demo',
-  'demo@softwareestres.test',
-  'pbkdf2:sha256:100000:softwareestresdemo:85db2910f37f75508d5474ec33c52eb425da8651ad53985303fc468fa476aaa8',
+  'demo@stressflow.test',
+  'pbkdf2:sha256:100000:stressflowdemo:85db2910f37f75508d5474ec33c52eb425da8651ad53985303fc468fa476aaa8',
   'arquitecto'
 )
 ON DUPLICATE KEY UPDATE
@@ -20,7 +20,7 @@ ON DUPLICATE KEY UPDATE
 
 SELECT id INTO @demo_usuario_id
 FROM usuarios
-WHERE email = 'demo@softwareestres.test'
+WHERE email = 'demo@stressflow.test'
 LIMIT 1;
 
 INSERT INTO proyectos (usuario_id, nombre, slug, descripcion, trafico_entrante_rps, esta_ejecutando)

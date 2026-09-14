@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  DEFAULT_AVERAGE_REQUEST_SIZE_KB,
+  DEFAULT_HEAVY_REQUEST_PERCENTAGE,
+  DEFAULT_HEAVY_REQUEST_SIZE_KB,
   KIND_META,
   makeNode,
   simulate,
@@ -7,6 +10,7 @@ import {
   type NodeKind,
   type SimEdge,
   type SimNode,
+  type RequestProfile,
   type SimResult,
 } from "@/lib/simulator";
 import { NODE_ICON } from "@/lib/node-icons";
@@ -17,9 +21,6 @@ import { Label } from "@/components/ui/label";
 import {
   Save,
   Activity,
-  AlertTriangle,
-  TrendingUp,
-  CircleDollarSign,
   Zap,
   Plus,
   ChevronLeft,
@@ -27,14 +28,21 @@ import {
   FilePlus2,
   FolderX,
   MoreVertical,
-  Copy,
-  Eraser,
   LogOut,
   Eye,
+  FileText,
+  GitCompareArrows,
+  History,
+  SlidersHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { UsuarioAutenticado } from "@/models/auth";
-import { projectService, type ProjectSummary } from "@/services/projectService";
+import {
+  projectService,
+  type ProjectSummary,
+  type ScenarioVersionSummary,
+  type VersionSnapshot,
+} from "@/services/projectService";
 import { simulationService } from "@/services/simulationService";
 import {
   DropdownMenu,
@@ -44,11 +52,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ConnectionsPanel } from "@/components/simulator/ConnectionsPanel";
-import { Metric } from "@/components/simulator/Metric";
 import { PropertiesPanel } from "@/components/simulator/PropertiesPanel";
 import { ResizeHandle } from "@/components/simulator/ResizeHandle";
 import { SystemConclusion } from "@/components/simulator/SystemConclusion";
 import { buildSystemConclusion } from "@/components/simulator/systemConclusionLogic";
+import { ModelLimitations } from "@/components/simulator/DecisionBlocks";
+import { VersionHistoryPanel } from "@/components/simulator/VersionHistoryPanel";
+import { WorkspaceState } from "@/components/simulator/WorkspaceState";
 import {
   CATEGORIES,
   initialEdges,
@@ -60,7 +70,81 @@ import {
 
 interface SimulatorDashboardProps {
   user?: UsuarioAutenticado;
-  onLogout?: () => void;
+  onLogout?: () => void | Promise<void>;
+}
+
+type WorkspaceTab = "properties" | "versions" | "compare" | "report";
+type SimulationState = "loading" | "backend" | "local" | "snapshot";
+
+interface DraftState {
+  nodes: SimNode[];
+  edges: SimEdge[];
+  traffic: number;
+  requestProfile: RequestProfile;
+  selectedId: string | null;
+  backendResult: SimResult | null;
+}
+
+function makeRequestProfile(
+  averageRequestSizeKb = DEFAULT_AVERAGE_REQUEST_SIZE_KB,
+  heavyRequestPercentage = DEFAULT_HEAVY_REQUEST_PERCENTAGE,
+  heavyRequestSizeKb = DEFAULT_HEAVY_REQUEST_SIZE_KB,
+): RequestProfile {
+  return {
+    averageRequestSizeKb,
+    heavyRequestPercentage,
+    heavyRequestSizeKb,
+  };
+}
+
+function formatRequestSize(sizeKb: number) {
+  if (sizeKb >= 1024) {
+    const value = sizeKb / 1024;
+    return value.toFixed(Number.isInteger(value) ? 0 : 1) + " MB";
+  }
+
+  return Math.round(sizeKb) + " KB";
+}
+
+function CompactSlider({
+  label,
+  value,
+  sliderValue,
+  min,
+  max,
+  step,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  sliderValue: number;
+  min: number;
+  max: number;
+  step: number;
+  disabled?: boolean;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div className="space-y-1.5 px-1 py-1">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <Label className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
+          {label}
+        </Label>
+        <span className="shrink-0 font-mono text-[11px] text-[color:var(--neon-cyan)]">
+          {value}
+        </span>
+      </div>
+      <Slider
+        value={[sliderValue]}
+        onValueChange={(nextValue) => onChange(nextValue[0])}
+        min={min}
+        max={max}
+        step={step}
+        disabled={disabled}
+      />
+    </div>
+  );
 }
 
 export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboardProps) {
@@ -68,6 +152,7 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
   const [edges, setEdges] = useState<SimEdge[]>(initialEdges);
   const [selectedId, setSelectedId] = useState<string | null>("n_app");
   const [traffic, setTraffic] = useState(600);
+  const [requestProfile, setRequestProfile] = useState<RequestProfile>(() => makeRequestProfile());
   const [proyectoId, setProyectoId] = useState<number | null>(null);
   const [nombreProyecto, setNombreProyecto] = useState("plataforma-checkout.v1");
   const [connectingFromId, setConnectingFromId] = useState<string | null>(null);
@@ -77,8 +162,15 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
   const [backendResult, setBackendResult] = useState<SimResult | null>(null);
   const [persistenceMessage, setPersistenceMessage] = useState<string | null>(null);
   const [persistenceError, setPersistenceError] = useState<string | null>(null);
-  const [leftWidth, setLeftWidth] = useState(256);
-  const [rightWidth, setRightWidth] = useState(360);
+  const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>("properties");
+  const [versions, setVersions] = useState<ScenarioVersionSummary[]>([]);
+  const [isLoadingVersions, setIsLoadingVersions] = useState(false);
+  const [isCreatingVersion, setIsCreatingVersion] = useState(false);
+  const [versionsError, setVersionsError] = useState<string | null>(null);
+  const [previewVersionId, setPreviewVersionId] = useState<number | null>(null);
+  const [simulationState, setSimulationState] = useState<SimulationState>("loading");
+  const [leftWidth, setLeftWidth] = useState(224);
+  const [rightWidth, setRightWidth] = useState(336);
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -86,7 +178,9 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
   const pendingDragRef = useRef<{ id: string; x: number; y: number } | null>(null);
   const dragFrameRef = useRef<number | null>(null);
   const resizeRef = useRef<{ side: "left" | "right"; startX: number; startW: number } | null>(null);
-  const canEdit = user?.rol !== "lector";
+  const draftBeforePreviewRef = useRef<DraftState | null>(null);
+  const canManageProjects = Boolean(user && user.rol !== "lector");
+  const canEdit = canManageProjects && !previewVersionId;
   const roleLabel =
     user?.rol === "lector" ? "Lector" : user?.rol === "administrador" ? "Admin" : "Arquitecto";
 
@@ -140,7 +234,10 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
     document.body.style.userSelect = "none";
   };
 
-  const localResult = useMemo(() => simulate(nodes, edges, traffic), [nodes, edges, traffic]);
+  const localResult = useMemo(
+    () => simulate(nodes, edges, traffic, requestProfile),
+    [nodes, edges, traffic, requestProfile],
+  );
   const result = backendResult ?? localResult;
   const selected = nodes.find((n) => n.id === selectedId) ?? null;
   const conclusion = useMemo(
@@ -168,9 +265,42 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
     void refreshProjects();
   }, [refreshProjects]);
 
+  const refreshVersions = useCallback(
+    async (projectId: number | null) => {
+      if (!projectId || !user?.email) {
+        setVersions([]);
+        setVersionsError(null);
+        return;
+      }
+
+      setIsLoadingVersions(true);
+      setVersionsError(null);
+      try {
+        setVersions(await projectService.listVersions(projectId));
+      } catch (error) {
+        setVersionsError(
+          error instanceof Error ? error.message : "No se pudieron listar versiones.",
+        );
+      } finally {
+        setIsLoadingVersions(false);
+      }
+    },
+    [user?.email],
+  );
+
   useEffect(() => {
+    void refreshVersions(proyectoId);
+  }, [proyectoId, refreshVersions]);
+
+  useEffect(() => {
+    if (previewVersionId) {
+      setSimulationState("snapshot");
+      return;
+    }
+
     const controller = new AbortController();
     setBackendResult(null);
+    setSimulationState("loading");
     const timeoutId = window.setTimeout(() => {
       simulationService
         .run(
@@ -178,15 +308,18 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
             nodos: nodes,
             conexiones: edges,
             trafico: traffic,
+            ...requestProfile,
           },
           controller.signal,
         )
         .then((nextResult) => {
           setBackendResult(nextResult);
+          setSimulationState("backend");
         })
         .catch((error) => {
           if (error instanceof DOMException && error.name === "AbortError") return;
           setBackendResult(null);
+          setSimulationState("local");
         });
     }, 250);
 
@@ -194,7 +327,7 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
       window.clearTimeout(timeoutId);
       controller.abort();
     };
-  }, [nodes, edges, traffic]);
+  }, [nodes, edges, traffic, requestProfile, previewVersionId]);
 
   // ---------- Drag nodes on canvas ----------
   const onNodeMouseDown = (e: React.MouseEvent, n: SimNode) => {
@@ -328,6 +461,8 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
   };
 
   const loadProject = async (id: number) => {
+    draftBeforePreviewRef.current = null;
+    setPreviewVersionId(null);
     setPersistenceError(null);
     setPersistenceMessage(null);
 
@@ -341,6 +476,13 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
       setProyectoId(proyecto.id);
       setNombreProyecto(proyecto.nombre);
       setTraffic(proyecto.traficoEntranteRps);
+      setRequestProfile(
+        makeRequestProfile(
+          proyecto.averageRequestSizeKb,
+          proyecto.heavyRequestPercentage,
+          proyecto.heavyRequestSizeKb,
+        ),
+      );
       setNodes(proyecto.nodos);
       setEdges(proyecto.conexiones);
       setSelectedId(proyecto.nodos[0]?.id ?? null);
@@ -354,16 +496,20 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
   };
 
   const startNewProject = () => {
-    if (!canEdit) {
+    if (!canManageProjects) {
       setPersistenceError("El rol lector solo puede ver proyectos guardados.");
       return;
     }
 
+    draftBeforePreviewRef.current = null;
+    setPreviewVersionId(null);
+    setWorkspaceTab("properties");
     setProyectoId(null);
     setNombreProyecto("nuevo-proyecto");
     setNodes([]);
     setEdges([]);
     setTraffic(600);
+    setRequestProfile(makeRequestProfile());
     setSelectedId(null);
     setConnectingFromId(null);
     setPersistenceMessage("Nuevo proyecto listo.");
@@ -404,6 +550,7 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
         usuario: user,
         nombre: nombreProyectoNormalizado,
         trafico: traffic,
+        ...requestProfile,
         estaEjecutando: true,
         nodos: nodes,
         conexiones: edges,
@@ -429,6 +576,10 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
     }
 
     if (!user?.email || !proyectoId) return;
+    if (
+      !window.confirm(`Borrar ${nombreProyecto}? También se eliminará su historial de versiones.`)
+    )
+      return;
 
     setIsSaving(true);
     setPersistenceError(null);
@@ -453,36 +604,9 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
     }
   };
 
-  const duplicateProject = () => {
-    if (!canEdit) {
-      setPersistenceError("El rol lector no puede duplicar proyectos.");
-      return;
-    }
-
-    setProyectoId(null);
-    setNombreProyecto(`${nombreProyecto.trim() || "proyecto"}-copia`);
-    setConnectingFromId(null);
-    setPersistenceMessage("Proyecto duplicado como copia sin guardar.");
-    setPersistenceError(null);
-  };
-
-  const clearCanvas = () => {
-    if (!canEdit) {
-      setPersistenceError("El rol lector no puede limpiar el canvas.");
-      return;
-    }
-
-    setNodes([]);
-    setEdges([]);
-    setSelectedId(null);
-    setConnectingFromId(null);
-    setPersistenceMessage("Canvas limpio.");
-    setPersistenceError(null);
-    draggingRef.current = null;
-  };
-
   const deleteSelected = () => {
     if (!selected || !canEdit) return;
+    if (!window.confirm(`Eliminar ${selected.name}? También se quitarán sus conexiones.`)) return;
     const selectedNodeId = selected.id;
 
     setNodes((prev) => prev.filter((n) => n.id !== selectedNodeId));
@@ -492,13 +616,152 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
     draggingRef.current = null;
   };
 
+  const createVersion = async (name: string, description: string) => {
+    if (!proyectoId || !canManageProjects || previewVersionId) return false;
+
+    setIsCreatingVersion(true);
+    setVersionsError(null);
+    try {
+      const snapshot: VersionSnapshot = {
+        schemaVersion: 1,
+        nodes,
+        edges,
+        traffic,
+        ...requestProfile,
+        result,
+      };
+      await projectService.createVersion(proyectoId, { name, description, snapshot });
+      await refreshVersions(proyectoId);
+      setPersistenceMessage("Versión guardada sin modificar el proyecto actual.");
+      return true;
+    } catch (error) {
+      setVersionsError(error instanceof Error ? error.message : "No se pudo guardar la versión.");
+      return false;
+    } finally {
+      setIsCreatingVersion(false);
+    }
+  };
+
+  const openVersion = async (versionId: number) => {
+    if (!proyectoId) return;
+
+    setVersionsError(null);
+    setIsLoadingVersions(true);
+    try {
+      const version = await projectService.getVersion(proyectoId, versionId);
+      if (!draftBeforePreviewRef.current) {
+        draftBeforePreviewRef.current = {
+          nodes,
+          edges,
+          traffic,
+          requestProfile,
+          selectedId,
+          backendResult,
+        };
+      }
+      setNodes(version.snapshot.nodes);
+      setEdges(version.snapshot.edges);
+      setTraffic(version.snapshot.traffic);
+      setRequestProfile(
+        makeRequestProfile(
+          version.snapshot.averageRequestSizeKb,
+          version.snapshot.heavyRequestPercentage,
+          version.snapshot.heavyRequestSizeKb,
+        ),
+      );
+      setSelectedId(version.snapshot.nodes[0]?.id ?? null);
+      setBackendResult(version.snapshot.result);
+      setPreviewVersionId(version.id);
+      setPersistenceMessage(`Versión ${version.name} abierta en modo lectura.`);
+    } catch (error) {
+      setVersionsError(error instanceof Error ? error.message : "No se pudo abrir la versión.");
+    } finally {
+      setIsLoadingVersions(false);
+    }
+  };
+
+  const closeVersionPreview = () => {
+    const draft = draftBeforePreviewRef.current;
+    if (!draft) return;
+    setNodes(draft.nodes);
+    setEdges(draft.edges);
+    setTraffic(draft.traffic);
+    setRequestProfile(draft.requestProfile);
+    setSelectedId(draft.selectedId);
+    setBackendResult(draft.backendResult);
+    draftBeforePreviewRef.current = null;
+    setPreviewVersionId(null);
+    setPersistenceMessage("Volviste al estado actual del proyecto.");
+  };
+
+  const renderWorkspacePanel = () => {
+    if (workspaceTab === "versions") {
+      return (
+        <VersionHistoryPanel
+          projectId={proyectoId}
+          versions={versions}
+          loading={isLoadingVersions}
+          creating={isCreatingVersion}
+          error={versionsError}
+          canCreate={canManageProjects && !previewVersionId}
+          previewVersionId={previewVersionId}
+          onCreate={createVersion}
+          onOpen={(versionId) => void openVersion(versionId)}
+          onClosePreview={closeVersionPreview}
+        />
+      );
+    }
+
+    if (workspaceTab === "compare") {
+      return (
+        <WorkspaceState
+          kind="empty"
+          title="Comparación preparada"
+          detail="La siguiente fase permitirá seleccionar dos versiones del mismo proyecto y ver deltas técnicos y estructurales."
+        />
+      );
+    }
+
+    if (workspaceTab === "report") {
+      return (
+        <div className="space-y-3">
+          <WorkspaceState
+            kind="empty"
+            title="Informe en la fase posterior"
+            detail="El informe imprimible se habilitará después de completar la comparación."
+          />
+          <ModelLimitations>
+            Stressflow es un modelo educativo de diseño temprano. El informe explicará supuestos y
+            no presentará estos resultados como mediciones de producción.
+          </ModelLimitations>
+        </div>
+      );
+    }
+
+    return selected ? (
+      <PropertiesPanel
+        node={selected}
+        onChange={updateSelected}
+        onDelete={deleteSelected}
+        metrics={result.perNode[selected.id]}
+        readOnly={!canEdit}
+      />
+    ) : (
+      <WorkspaceState
+        kind="empty"
+        title="Seleccioná un componente"
+        detail="Elegí un nodo del canvas para revisar configuración y resultado."
+      />
+    );
+  };
+
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground lg:h-screen">
       {/* ---------- Barra superior ---------- */}
-      <header className="flex shrink-0 flex-col gap-3 border-b border-border/60 bg-panel/75 px-3 py-3 backdrop-blur lg:min-h-14 lg:flex-row lg:items-center lg:justify-between lg:px-4">
+      <header className="flex shrink-0 flex-col gap-3 border-b border-border/50 bg-panel px-3 py-2.5 lg:min-h-14 lg:flex-row lg:items-center lg:justify-between lg:px-4">
         <div className="flex min-w-0 items-center gap-3 lg:flex-1">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[color:var(--neon-cyan)]/15 ring-1 ring-[color:var(--neon-cyan)]/40">
-            <Activity className="h-4 w-4 text-[color:var(--neon-cyan)]" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-card text-muted-foreground">
+            <Activity className="h-4 w-4" />
           </div>
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold tracking-tight">Simulador</div>
@@ -523,14 +786,12 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
           {user && (
             <span
               className={cn(
-                "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border px-2 font-mono text-[11px]",
-                canEdit
-                  ? "border-[color:var(--neon-cyan)]/40 text-[color:var(--neon-cyan)]"
-                  : "border-[color:var(--neon-amber)]/45 text-[color:var(--neon-amber)]",
+                "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-border/60 px-2 font-mono text-[11px] text-muted-foreground",
+                !canManageProjects && "text-[color:var(--status-warning)]",
               )}
-              title={canEdit ? "Puede editar proyectos" : "Solo lectura"}
+              title={canManageProjects ? "Puede editar proyectos" : "Solo lectura"}
             >
-              {!canEdit && <Eye className="h-3.5 w-3.5" />}
+              {!canManageProjects && <Eye className="h-3.5 w-3.5" />}
               {roleLabel}
             </span>
           )}
@@ -541,7 +802,7 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
               if (nextProjectId) void loadProject(nextProjectId);
             }}
             disabled={isLoadingProjects || !proyectosGuardados.length}
-            className="h-8 min-w-0 max-w-full shrink rounded-md border border-border/60 bg-card/70 px-2 font-mono text-[11px] text-foreground outline-none transition hover:border-[color:var(--neon-cyan)]/50 disabled:cursor-not-allowed disabled:opacity-50 sm:max-w-48"
+            className="h-8 min-w-0 max-w-full shrink rounded-md border border-border/60 bg-card px-2 font-mono text-[11px] text-foreground outline-none transition hover:border-white/15 focus:border-[color:var(--neon-cyan)]/45 disabled:cursor-not-allowed disabled:opacity-50 sm:max-w-48"
             title="Cargar proyecto guardado"
           >
             <option value="">Proyectos guardados</option>
@@ -564,26 +825,22 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
             size="sm"
             onClick={saveProject}
             disabled={isSaving || !canEdit}
-            className="shrink-0 bg-[color:var(--neon-cyan)]/15 text-[color:var(--neon-cyan)] ring-1 ring-[color:var(--neon-cyan)]/50 hover:bg-[color:var(--neon-cyan)]/25"
+            className="shrink-0"
           >
             <Save className="mr-1.5 h-3.5 w-3.5" /> {isSaving ? "Guardando..." : "Guardar"}
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="ghost" className="h-8 w-8 shrink-0 px-0">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 w-8 shrink-0 px-0"
+                aria-label="Abrir acciones del proyecto"
+              >
                 <MoreVertical className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={duplicateProject} disabled={!canEdit}>
-                <Copy className="h-4 w-4" />
-                Duplicar proyecto
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={clearCanvas} disabled={!canEdit}>
-                <Eraser className="h-4 w-4" />
-                Limpiar canvas
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={deleteCurrentProject}
                 disabled={!proyectoId || isSaving || !canEdit}
@@ -606,14 +863,57 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
         </div>
       </header>
 
+      <nav
+        className="flex shrink-0 items-center gap-3 overflow-x-auto border-b border-border/45 bg-panel px-3"
+        aria-label="Herramientas del escenario"
+      >
+        {[
+          { id: "properties" as const, label: "Propiedades", icon: SlidersHorizontal },
+          { id: "versions" as const, label: "Versiones", icon: History },
+          { id: "compare" as const, label: "Comparar", icon: GitCompareArrows },
+          { id: "report" as const, label: "Informe", icon: FileText },
+        ].map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => {
+              setWorkspaceTab(id);
+              setRightOpen(true);
+            }}
+            className={cn(
+              "flex h-9 shrink-0 items-center gap-1.5 border-b-2 border-transparent px-1.5 font-mono text-[10px] uppercase tracking-wide text-muted-foreground transition hover:text-foreground",
+              workspaceTab === id && "border-[color:var(--neon-cyan)] text-foreground",
+            )}
+            aria-current={workspaceTab === id ? "page" : undefined}
+          >
+            <Icon className="h-3.5 w-3.5" /> {label}
+          </button>
+        ))}
+        <div className="ml-auto flex shrink-0 items-center gap-2 border-l border-border/60 pl-3 font-mono text-[10px] text-muted-foreground">
+          <span
+            className={cn(
+              "h-1.5 w-1.5 rounded-full",
+              simulationState === "backend" && "bg-muted-foreground",
+              simulationState === "local" && "bg-[color:var(--neon-amber)]",
+              simulationState === "snapshot" && "bg-[color:var(--neon-violet)]",
+              simulationState === "loading" && "animate-pulse bg-muted-foreground",
+            )}
+          />
+          {simulationState === "backend" && "Motor backend"}
+          {simulationState === "local" && "Cálculo local"}
+          {simulationState === "snapshot" && "Snapshot histórico"}
+          {simulationState === "loading" && "Recalculando"}
+        </div>
+      </nav>
+
       {(persistenceMessage || persistenceError) && (
         <div className="pointer-events-none fixed inset-x-3 bottom-6 z-50 flex justify-center">
           <div
             className={cn(
-              "max-w-[min(92vw,520px)] rounded-lg border px-4 py-3 text-center text-sm shadow-2xl backdrop-blur",
+              "max-w-[min(92vw,520px)] rounded-lg border px-4 py-3 text-center text-sm shadow-lg backdrop-blur",
               persistenceError
                 ? "border-[color:var(--status-saturated)]/50 bg-[color:var(--status-saturated)]/15 text-[color:var(--status-saturated)]"
-                : "border-[color:var(--neon-cyan)]/45 bg-panel/90 text-[color:var(--neon-cyan)]",
+                : "border-border/70 bg-panel/95 text-foreground",
             )}
             role={persistenceError ? "alert" : "status"}
           >
@@ -629,7 +929,7 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
           <>
             <aside
               style={{ width: leftWidth }}
-              className="relative hidden shrink-0 flex-col gap-4 overflow-y-auto border-r border-border/60 bg-panel/50 p-3 lg:flex"
+              className="relative hidden shrink-0 flex-col gap-3 overflow-y-auto border-r border-border/45 bg-panel p-3 lg:flex"
             >
               <div>
                 <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
@@ -650,22 +950,25 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
                         <div
                           key={kind}
                           draggable={canEdit}
+                          role="button"
+                          tabIndex={canEdit ? 0 : -1}
+                          aria-label={`Agregar ${meta.label} al canvas`}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              addNodeToCanvas(kind);
+                            }
+                          }}
                           onDragStart={(e) => onLibDragStart(e, kind)}
                           className={cn(
-                            "group flex items-center gap-2.5 rounded-md border border-border/60 bg-card/60 px-2.5 py-2 text-sm transition",
+                            "group flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-muted-foreground transition",
                             canEdit
-                              ? "cursor-grab hover:border-[color:var(--neon-cyan)]/50 hover:bg-card active:cursor-grabbing"
+                              ? "cursor-grab hover:bg-card hover:text-foreground active:cursor-grabbing"
                               : "cursor-not-allowed opacity-60",
                           )}
                         >
-                          <div
-                            className="flex h-7 w-7 items-center justify-center rounded-md ring-1"
-                            style={{
-                              backgroundColor: `color-mix(in oklab, ${meta.color} 12%, transparent)`,
-                              boxShadow: `0 0 0 1px color-mix(in oklab, ${meta.color} 40%, transparent)`,
-                            }}
-                          >
-                            <Icon className="h-3.5 w-3.5" style={{ color: meta.color }} />
+                          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-card text-muted-foreground">
+                            <Icon className="h-3.5 w-3.5" />
                           </div>
                           <span className="flex-1 truncate">{meta.label}</span>
                           <Plus className="h-3 w-3 text-muted-foreground opacity-0 transition group-hover:opacity-100" />
@@ -728,9 +1031,9 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
                     type="button"
                     onClick={() => addNodeToCanvas(kind)}
                     disabled={!canEdit}
-                    className="flex h-10 shrink-0 items-center gap-2 rounded-md border border-border/60 bg-card/70 px-3 text-xs transition hover:border-[color:var(--neon-cyan)]/50 hover:bg-card disabled:cursor-not-allowed disabled:opacity-60"
+                    className="flex h-9 shrink-0 items-center gap-2 rounded-lg bg-card px-3 text-xs text-muted-foreground transition hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    <Icon className="h-3.5 w-3.5" style={{ color: meta.color }} />
+                    <Icon className="h-3.5 w-3.5 text-muted-foreground" />
                     <span className="max-w-28 truncate">{meta.label}</span>
                   </button>
                 );
@@ -740,6 +1043,8 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
 
           <div
             ref={canvasRef}
+            role="region"
+            aria-label="Canvas de arquitectura del sistema"
             onMouseMove={onCanvasMouseMove}
             onMouseUp={stopDrag}
             onMouseLeave={stopDrag}
@@ -806,7 +1111,6 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
                       strokeLinecap="round"
                       className={cn("flow-line", hot && "fast", e.async && "slow")}
                       markerEnd={hot ? "url(#arrow-warn)" : "url(#arrow-cyan)"}
-                      style={{ filter: `drop-shadow(0 0 6px ${color})` }}
                     />
                   </g>
                 );
@@ -815,9 +1119,9 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
 
             {!nodes.length && (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
-                <div className="max-w-sm rounded-lg border border-border/60 bg-panel/80 p-5 text-center shadow-[var(--shadow-glow-cyan)] backdrop-blur">
-                  <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-md bg-[color:var(--neon-cyan)]/15 ring-1 ring-[color:var(--neon-cyan)]/45">
-                    <Plus className="h-5 w-5 text-[color:var(--neon-cyan)]" />
+                <div className="max-w-sm rounded-xl border border-border/50 bg-panel/95 p-5 text-center">
+                  <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-card text-muted-foreground">
+                    <Plus className="h-5 w-5" />
                   </div>
                   <div className="text-sm font-semibold">Canvas listo para construir</div>
                   <p className="mt-2 text-xs leading-5 text-muted-foreground">
@@ -833,83 +1137,67 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
               const m = result.perNode[n.id];
               const status = m?.status ?? "healthy";
               const styles = STATUS_STYLES[status];
-              const meta = KIND_META[n.kind];
               const Icon = NODE_ICON[n.kind];
               const isSelected = n.id === selectedId;
               const isConnectingSource = n.id === connectingFromId;
-              const showAlert = status === "saturated" || status === "error";
               return (
                 <div
                   key={n.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`${n.name}. ${styles.label}. Seleccionar componente`}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      setSelectedId(n.id);
+                      setWorkspaceTab("properties");
+                      setRightOpen(true);
+                    }
+                  }}
                   onMouseDown={(e) => onNodeMouseDown(e, n)}
                   className={cn(
-                    "group absolute select-none rounded-xl bg-card/90 ring-1 backdrop-blur transition-all",
+                    "group absolute select-none rounded-xl bg-card ring-1 transition-all",
                     canEdit ? "cursor-grab active:cursor-grabbing" : "cursor-default",
                     styles.ring,
                     styles.glow,
                     isSelected &&
-                      "outline outline-2 outline-offset-2 outline-[color:var(--neon-cyan)]/70",
+                      "outline outline-2 outline-offset-2 outline-[color:var(--neon-cyan)]/65",
                     isConnectingSource &&
                       "outline outline-2 outline-offset-4 outline-[color:var(--neon-amber)]",
                   )}
                   style={{ left: n.x, top: n.y, width: NODE_W, height: NODE_H }}
                 >
-                  {showAlert && (
-                    <div className="alert-blink absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-[color:var(--status-saturated)]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[color:var(--status-saturated)] ring-1 ring-[color:var(--status-saturated)]/60">
-                      {status === "error" ? "Con errores" : "Tráfico excedido"}
-                    </div>
-                  )}
-                  <div className="flex h-full flex-col justify-between p-3.5">
-                    <div className="flex items-start justify-between">
-                      <div
-                        className="pulse-glow flex h-9 w-9 items-center justify-center rounded-md"
-                        style={{
-                          color: meta.color,
-                          backgroundColor: `color-mix(in oklab, ${meta.color} 14%, transparent)`,
-                          boxShadow: `inset 0 0 0 1px color-mix(in oklab, ${meta.color} 40%, transparent)`,
-                        }}
-                      >
-                        <Icon className="h-5 w-5" />
+                  <div className="flex h-full flex-col justify-between px-3 py-2.5">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted/70 text-muted-foreground">
+                        <Icon className="h-4 w-4" />
                       </div>
-                      <div className="flex items-center gap-1.5">
+                      <div className="min-w-0 flex-1 truncate text-sm font-medium">{n.name}</div>
+                      <div className="flex shrink-0 items-center gap-1.5">
                         <span className={cn("h-1.5 w-1.5 rounded-full", styles.dot)} />
-                        <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                        <span className="font-mono text-[9px] uppercase tracking-wide text-muted-foreground">
                           {styles.label}
                         </span>
                       </div>
                     </div>
-
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold leading-tight">{n.name}</div>
-                      <div className="mt-1 flex min-w-0 flex-wrap gap-x-2 gap-y-1 font-mono text-[11px] leading-4 text-muted-foreground">
-                        <span>{n.instances}x</span>
-                        <span>{n.capacity} r/s</span>
-                        <span className="text-[color:var(--neon-cyan)]">
-                          {((m?.load ?? 0) * 100).toFixed(0)}%
-                        </span>
-                      </div>
-                      <div className="font-mono text-[10px] leading-4 text-muted-foreground/80">
-                        cola {(m?.queued ?? 0).toFixed(0)} r/s · error{" "}
-                        {((m?.errorRate ?? 0) * 100).toFixed(1)}%
-                      </div>
+                    <div className="font-mono text-[10px] text-muted-foreground">
+                      Carga {((m?.load ?? 0) * 100).toFixed(0)}% · Error{" "}
+                      {((m?.errorRate ?? 0) * 100).toFixed(1)}%
                     </div>
                   </div>
 
                   {/* Barra de carga */}
-                  <div className="absolute inset-x-2 bottom-1 h-1 overflow-hidden rounded-full bg-border/60">
+                  <div className="absolute inset-x-3 bottom-1.5 h-0.5 overflow-hidden rounded-full bg-white/8">
                     <div
                       className="h-full rounded-full transition-all"
                       style={{
                         width: `${Math.min((m?.load ?? 0) * 100, 100)}%`,
                         background:
                           status === "healthy"
-                            ? "var(--neon-cyan)"
+                            ? "var(--muted-foreground)"
                             : status === "warning" || status === "high_load"
                               ? "var(--status-warning)"
                               : "var(--status-saturated)",
-                        boxShadow: `0 0 8px ${
-                          status === "healthy" ? "var(--neon-cyan)" : "var(--status-saturated)"
-                        }`,
                       }}
                     />
                   </div>
@@ -917,79 +1205,49 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
               );
             })}
 
-            {/* Control de tráfico */}
-            <div className="absolute left-3 top-3 w-[min(18rem,calc(100vw-1.5rem))] rounded-lg border border-border/60 bg-panel/80 p-3 backdrop-blur sm:left-4 sm:top-4 sm:w-72">
-              <div className="mb-2 flex items-start justify-between gap-3">
+            {/* Panel flotante de tráfico */}
+            <div className="absolute left-3 top-3 z-20 w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-border/50 bg-panel/95 p-2.5 backdrop-blur sm:left-4 sm:top-4">
+              <div className="flex items-start justify-between gap-3">
                 <div>
                   <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                    Tráfico entrante
+                    Tráfico
                   </Label>
-                  <div className="mt-1 font-mono text-xs text-[color:var(--neon-cyan)]">
-                    {traffic} req/s
+                  <div className="mt-1 font-mono text-xs text-foreground">
+                    {traffic} req/s · {formatRequestSize(requestProfile.averageRequestSizeKb)}
                   </div>
                 </div>
               </div>
-              <Slider
-                value={[traffic]}
-                onValueChange={(v) => setTraffic(v[0])}
-                min={50}
-                max={4000}
-                step={50}
-                disabled={!canEdit}
-              />
+              <div className="mt-2 grid gap-2 px-0.5 sm:grid-cols-2">
+                <CompactSlider
+                  label="Solicitudes por segundo"
+                  value={traffic + " req/s"}
+                  sliderValue={traffic}
+                  min={50}
+                  max={4000}
+                  step={50}
+                  disabled={!canEdit}
+                  onChange={(value) => setTraffic(value)}
+                />
+                <CompactSlider
+                  label="Tamaño promedio de solicitud"
+                  value={formatRequestSize(requestProfile.averageRequestSizeKb)}
+                  sliderValue={requestProfile.averageRequestSizeKb}
+                  min={1}
+                  max={2048}
+                  step={1}
+                  disabled={!canEdit}
+                  onChange={(value) =>
+                    setRequestProfile((current) => ({ ...current, averageRequestSizeKb: value }))
+                  }
+                />
+              </div>
             </div>
-          </div>
-
-          {/* Métricas inferiores */}
-          <div className="grid shrink-0 grid-cols-1 gap-3 border-t border-border/60 bg-panel/50 p-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
-            <Metric
-              label="Tráfico total"
-              value={`${Math.round(traffic)} req/s`}
-              icon={Zap}
-              accent="cyan"
-            />
-            <Metric
-              label="Latencia prom."
-              value={`${result.totals.avgLatency.toFixed(0)} ms`}
-              icon={Activity}
-              accent={result.totals.avgLatency > 200 ? "warn" : "cyan"}
-            />
-            <Metric
-              label="Salida procesada"
-              value={`${result.totals.throughput.toFixed(0)} r/s`}
-              icon={TrendingUp}
-              accent="violet"
-            />
-            <Metric
-              label="Tasa de error"
-              value={`${(result.totals.errorRate * 100).toFixed(1)}%`}
-              icon={AlertTriangle}
-              accent={result.totals.errorRate > 0.05 ? "warn" : "cyan"}
-            />
-            <Metric
-              label="Costo mensual est."
-              value={`$${result.totals.cost.toFixed(0)}`}
-              icon={CircleDollarSign}
-              accent="amber"
-            />
           </div>
 
           <SystemConclusion conclusion={conclusion} />
 
           <section className="border-t border-border/60 bg-panel/60 p-3 lg:hidden">
-            {selected ? (
-              <PropertiesPanel
-                node={selected}
-                onChange={updateSelected}
-                onDelete={deleteSelected}
-                metrics={result.perNode[selected.id]}
-                readOnly={!canEdit}
-              />
-            ) : (
-              <div className="rounded-lg border border-border/60 bg-card/60 p-3 text-sm text-muted-foreground">
-                Seleccioná un componente del canvas para editarlo.
-              </div>
-            )}
+            {renderWorkspacePanel()}
           </section>
         </main>
 
@@ -999,21 +1257,10 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
             <ResizeHandle onMouseDown={startResize("right")} />
             <aside
               style={{ width: rightWidth }}
-              className="relative hidden shrink-0 flex-col gap-4 overflow-y-auto border-l border-border/60 bg-panel/50 p-4 lg:flex"
+              className="relative hidden shrink-0 flex-col gap-4 overflow-y-auto border-l border-border/45 bg-panel p-4 lg:flex"
+              aria-label="Panel contextual del escenario"
             >
-              {selected ? (
-                <PropertiesPanel
-                  node={selected}
-                  onChange={updateSelected}
-                  onDelete={deleteSelected}
-                  metrics={result.perNode[selected.id]}
-                  readOnly={!canEdit}
-                />
-              ) : (
-                <div className="text-sm text-muted-foreground">
-                  Seleccioná un componente para configurarlo.
-                </div>
-              )}
+              {renderWorkspacePanel()}
             </aside>
           </>
         )}
@@ -1024,15 +1271,17 @@ export default function SimulatorDashboard({ user, onLogout }: SimulatorDashboar
         type="button"
         onClick={() => setLeftOpen((v) => !v)}
         title={leftOpen ? "Ocultar biblioteca" : "Mostrar biblioteca"}
-        className="fixed left-2 top-1/2 z-30 hidden h-9 w-6 -translate-y-1/2 items-center justify-center rounded-r-md border border-l-0 border-border/60 bg-panel/90 text-muted-foreground shadow-lg backdrop-blur transition hover:bg-card hover:text-[color:var(--neon-cyan)] lg:flex"
+        aria-label={leftOpen ? "Ocultar biblioteca" : "Mostrar biblioteca"}
+        className="fixed left-2 top-1/2 z-30 hidden h-9 w-6 -translate-y-1/2 items-center justify-center rounded-r-md border border-l-0 border-border/60 bg-panel/90 text-muted-foreground backdrop-blur transition hover:bg-card hover:text-[color:var(--neon-cyan)] lg:flex"
       >
         {leftOpen ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
       </button>
       <button
         type="button"
         onClick={() => setRightOpen((v) => !v)}
-        title={rightOpen ? "Ocultar propiedades" : "Mostrar propiedades"}
-        className="fixed right-2 top-1/2 z-30 hidden h-9 w-6 -translate-y-1/2 items-center justify-center rounded-l-md border border-r-0 border-border/60 bg-panel/90 text-muted-foreground shadow-lg backdrop-blur transition hover:bg-card hover:text-[color:var(--neon-cyan)] lg:flex"
+        title={rightOpen ? "Ocultar panel contextual" : "Mostrar panel contextual"}
+        aria-label={rightOpen ? "Ocultar panel contextual" : "Mostrar panel contextual"}
+        className="fixed right-2 top-1/2 z-30 hidden h-9 w-6 -translate-y-1/2 items-center justify-center rounded-l-md border border-r-0 border-border/60 bg-panel/90 text-muted-foreground backdrop-blur transition hover:bg-card hover:text-[color:var(--neon-cyan)] lg:flex"
       >
         {rightOpen ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
       </button>
